@@ -97,7 +97,7 @@ class Robot : public frc::TimedRobot
 
     frc::BuiltInAccelerometer acc;
     // AHRS: attitude and heading reference system
-    studica::AHRS *ahrs = new studica::AHRS(frc::SerialPort::Port::kUSB1);
+    studica::AHRS *ahrs = new studica::AHRS(studica::AHRS::NavXComType::kUSB1);
     // Creating my kinematics object using the module locations.
     frc::SwerveDriveKinematics<4> kinematics{
         m_frontLeftLocation, m_frontRightLocation, m_backLeftLocation,
