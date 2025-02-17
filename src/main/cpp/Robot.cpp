@@ -46,6 +46,9 @@ class Robot : public frc::TimedRobot
     rev::spark::SparkMax wheelbr{7, rev::spark::SparkLowLevel::MotorType::kBrushless};
     rev::spark::SparkClosedLoopController pidbr = wheelbr.GetClosedLoopController();
 
+    // Configuration object for PID control of drive motors via SparkMax's
+    rev::spark::SparkBaseConfig pidConfig{};
+
     // for encoders, consider changing methods to GetAlternateEncoder with AlternateEncoder::Type::kHallEffect or something if you face an error
     // Setting up rotating motors using even CAN bus ID's
     rev::spark::SparkMax rotfl{2, rev::spark::SparkLowLevel::MotorType::kBrushless};
@@ -109,11 +112,37 @@ class Robot : public frc::TimedRobot
 
     void RobotInit()
     {
-        wheelfl.SetInverted(true);
-        wheelbr.SetInverted(true);
-        wheelbl.SetInverted(true);
-        wheelfr.SetInverted(true);
+        // wheelfl.SetInverted(true);
+        // wheelbr.SetInverted(true);
+        // wheelbl.SetInverted(true);
+        // wheelfr.SetInverted(true);
 
+        // This section, taken from the REVLib 2025 documentation, uses C++ "method chaining."
+        // This is a compact notation whereby multiple calls on a single object can be combined,
+        // so long as the methods return a reference to the object itself (as these methods do).
+        // This is why all but the final method call in such chained calls omit the semicolon
+        // at the end of their respective lines.
+        pidConfig
+            .Inverted(true)
+            .SetIdleMode(rev::spark::SparkBaseConfig::IdleMode::kBrake);
+        pidConfig.encoder
+            .PositionConversionFactor(1000)
+            .VelocityConversionFactor(1000);
+        pidConfig.closedLoop
+            .SetFeedbackSensor(rev::spark::ClosedLoopConfig::FeedbackSensor::kPrimaryEncoder)
+            .Pid(0.0001, 0.000001, 0.00000001)
+            .IZone(4000);
+
+        wheelfl.Configure(pidConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
+            rev::spark::SparkMax::PersistMode::kPersistParameters);
+        wheelfr.Configure(pidConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
+            rev::spark::SparkMax::PersistMode::kPersistParameters);
+        wheelbl.Configure(pidConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
+            rev::spark::SparkMax::PersistMode::kPersistParameters);
+        wheelbr.Configure(pidConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
+            rev::spark::SparkMax::PersistMode::kPersistParameters);
+
+/*
         pidfl.SetP(0.0001);
         pidfl.SetI(.000001);
         pidfl.SetD(0.00000001);
@@ -133,7 +162,9 @@ class Robot : public frc::TimedRobot
         pidbr.SetI(.000001);
         pidbr.SetD(0.00000001);
         pidbr.SetIZone(4000);
+*/
 
+/*
         shoot_top.SetInverted(false);
         pidshoot_top.SetP(0.0001);
         pidshoot_top.SetI(.000001);
@@ -151,19 +182,6 @@ class Robot : public frc::TimedRobot
         pidintake.SetI(.000001);
         pidintake.SetD(0.00000001);
         pidintake.SetIZone(4000);
-
-/*
-        intakedeploy.SetInverted(true);
-        pidintakedeploy.SetP(0.0001);
-        pidintakedeploy.SetI(.000001);
-        pidintakedeploy.SetD(0.00000001);
-        pidintakedeploy.SetIZone(4000);
-
-        hangdrive.SetInverted(false);
-        pidhangdrive.SetP(0.0001);
-        pidhangdrive.SetI(.000001);
-        pidhangdrive.SetD(0.00000001);
-        pidhangdrive.SetIZone(4000);
 */
 
 //        spark.Set(0);
@@ -353,7 +371,7 @@ class Robot : public frc::TimedRobot
         double bale = bl.speed.value();
         double bari = br.speed.value();
 
-        double flpos = encfl.GetAbsolutePosition() - getfl;
+        double flpos = encfl.Get() - getfl;
 
         if (flpos > 0.5)
         {
@@ -364,7 +382,7 @@ class Robot : public frc::TimedRobot
             flpos += 1;
         }
 
-        double frpos = fmod(encfr.GetAbsolutePosition() + .64, 1) - getfr;
+        double frpos = fmod(encfr.Get() + .64, 1) - getfr;
         if (frpos > 0.5)
         {
             frpos -= 1;
@@ -373,7 +391,7 @@ class Robot : public frc::TimedRobot
         {
             frpos += 1;
         }
-        double blpos = fmod(encbl.GetAbsolutePosition() + .4, 1) - getbl;
+        double blpos = fmod(encbl.Get() + .4, 1) - getbl;
         if (blpos > 0.5)
         {
             blpos -= 1;
@@ -383,7 +401,7 @@ class Robot : public frc::TimedRobot
             blpos += 1;
         }
 
-        double brpos = encbr.GetAbsolutePosition() - getbr;
+        double brpos = encbr.Get() - getbr;
         if (brpos > 0.5)
         {
             brpos -= 1;
@@ -638,7 +656,7 @@ class Robot : public frc::TimedRobot
         double getbl = .825;
         double getbr = .125;
 
-        double flpos = encfl.GetAbsolutePosition() - getfl;
+        double flpos = encfl.Get() - getfl;
         if (flpos > 0.5)
         {
             flpos -= 1;
@@ -648,7 +666,7 @@ class Robot : public frc::TimedRobot
             flpos += 1;
         }
 
-        double frpos = fmod(encfr.GetAbsolutePosition() + .14, 1) - getfr;
+        double frpos = fmod(encfr.Get() + .14, 1) - getfr;
         if (frpos > 0.5)
         {
             frpos -= 1;
@@ -658,7 +676,7 @@ class Robot : public frc::TimedRobot
             frpos += 1;
         }
 
-        double blpos = fmod(encbl.GetAbsolutePosition() + .4, 1) - getbl;
+        double blpos = fmod(encbl.Get() + .4, 1) - getbl;
         if (blpos > 0.5)
         {
             blpos -= 1;
@@ -668,7 +686,7 @@ class Robot : public frc::TimedRobot
             blpos += 1;
         }
 
-        double brpos = encbr.GetAbsolutePosition() - getbr;
+        double brpos = encbr.Get() - getbr;
         if (brpos > 0.5)
         {
             brpos -= 1;
