@@ -31,10 +31,10 @@
 class Robot : public frc::TimedRobot
 {
     // Defines the locations of each wheel
-    frc::Translation2d m_frontLeftLocation{.267_m, .365_m};
-    frc::Translation2d m_frontRightLocation{.267_m, -0.365_m};
-    frc::Translation2d m_backLeftLocation{-0.267_m, 0.365_m};
-    frc::Translation2d m_backRightLocation{-0.267_m, -0.365_m};
+    frc::Translation2d m_frontLeftLocation{0.314_m, 0.314_m};
+    frc::Translation2d m_frontRightLocation{0.314_m, -0.314_m};
+    frc::Translation2d m_backLeftLocation{-0.314_m, 0.314_m};
+    frc::Translation2d m_backRightLocation{-0.314_m, -0.314_m};
 
     // Setting up drive motors using odd CAN bus ID's
     rev::spark::SparkMax wheelfl{1, rev::spark::SparkLowLevel::MotorType::kBrushless};
@@ -126,8 +126,8 @@ class Robot : public frc::TimedRobot
             .Inverted(true)
             .SetIdleMode(rev::spark::SparkBaseConfig::IdleMode::kBrake);
         pidConfig.encoder
-            .PositionConversionFactor(1000)
-            .VelocityConversionFactor(1000);
+            .PositionConversionFactor(1)
+            .VelocityConversionFactor(1);
         pidConfig.closedLoop
             .SetFeedbackSensor(rev::spark::ClosedLoopConfig::FeedbackSensor::kPrimaryEncoder)
             .Pid(0.0001, 0.000001, 0.00000001)
@@ -360,19 +360,21 @@ class Robot : public frc::TimedRobot
 
         auto [fl, fr, bl, br] = kinematics.ToSwerveModuleStates(speeds);
 
-        // move swerve motors to angles here
-        double getfl = fl.angle.Radians().value() / 2.0 / PI;
+        // move swerve motors to angles here (i.e. the STEERING angle)
+        double getfl = fl.angle.Radians().value() / 2.0 / PI;  // i.e. number of rotations
         double getfr = fr.angle.Radians().value() / 2.0 / PI;
         double getbl = bl.angle.Radians().value() / 2.0 / PI;
         double getbr = br.angle.Radians().value() / 2.0 / PI;
 
+        // These values pertain to the DRIVING speed
         double frole = fl.speed.value();
         double frori = fr.speed.value();
         double bale = bl.speed.value();
         double bari = br.speed.value();
 
-        double flpos = encfl.Get() - getfl;
+        double flpos = encfl.Get() - getfl;  // steering??
 
+        // Adjust flpos so that it is in the range [-0.5, 0.5]?
         if (flpos > 0.5)
         {
             flpos -= 1;
@@ -411,7 +413,11 @@ class Robot : public frc::TimedRobot
             brpos += 1;
         }
 
-        rotfl.Set(-flpos * 1.5);
+//        rotfl.Set(-flpos * 1.5);
+        rotfl.Set(-flpos * 0.1);
+
+        return;
+
         rotfr.Set(frpos * 1.5);
         rotbl.Set(-blpos * 1.5);
         rotbr.Set(-brpos * 1.5);
