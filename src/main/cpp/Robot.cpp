@@ -52,8 +52,11 @@ class Robot : public frc::TimedRobot
     // for encoders, consider changing methods to GetAlternateEncoder with AlternateEncoder::Type::kHallEffect or something if you face an error
     // Setting up rotating motors using even CAN bus ID's
     rev::spark::SparkMax rotfl{2, rev::spark::SparkLowLevel::MotorType::kBrushless};
+
+    // The constructor parameter is the "analog input channel" to use, corresponding to
+    // the RoboRIO AnalogIn pins.
     frc::AnalogEncoder encfl{0};
-    double lasta = 0;
+    double lasta = 0;  // last angle? Not used
     rev::spark::SparkMax rotfr{6, rev::spark::SparkLowLevel::MotorType::kBrushless};
     frc::AnalogEncoder encfr{1};
     rev::spark::SparkMax rotbl{4, rev::spark::SparkLowLevel::MotorType::kBrushless};
@@ -96,7 +99,7 @@ class Robot : public frc::TimedRobot
     double cfac = 0;
 
     frc::Timer time;
-    bool fieldoriented = false;
+    bool fieldoriented = false;  // Not used
 
     frc::BuiltInAccelerometer acc;
     // AHRS: attitude and heading reference system
@@ -329,7 +332,7 @@ class Robot : public frc::TimedRobot
         }
     }
 
-    void Drive(double x, double y, double rotate)
+    void Drive0(double x, double y, double rotate)
     {
         // if (x != 0 && y != 0 && rotate != 0) {
         try
@@ -357,6 +360,107 @@ class Robot : public frc::TimedRobot
         units::meters_per_second_t speedy{y};
         units::meters_per_second_t speedx{x};
         frc::ChassisSpeeds speeds = frc::ChassisSpeeds::FromFieldRelativeSpeeds(limitx.Calculate(speedy), limity.Calculate(speedx), rad * 1.2, rot2d);
+
+        auto [fl, fr, bl, br] = kinematics.ToSwerveModuleStates(speeds);
+
+        // move swerve motors to angles here
+        double getfl = fl.angle.Radians().value() / 2.0 / PI;
+        double getfr = fr.angle.Radians().value() / 2.0 / PI;
+        double getbl = bl.angle.Radians().value() / 2.0 / PI;
+        double getbr = br.angle.Radians().value() / 2.0 / PI;
+
+        double frole = fl.speed.value();
+        double frori = fr.speed.value();
+        double bale = bl.speed.value();
+        double bari = br.speed.value();
+
+        double flpos = encfl.Get() - getfl;
+
+        if (flpos > 0.5)
+        {
+            flpos -= 1;
+        }
+        else if (flpos < -0.5)
+        {
+            flpos += 1;
+        }
+
+        double frpos = fmod(encfr.Get() + .64, 1) - getfr;
+        if (frpos > 0.5)
+        {
+            frpos -= 1;
+        }
+        else if (frpos < -0.5)
+        {
+            frpos += 1;
+        }
+        double blpos = fmod(encbl.Get() + .4, 1) - getbl;
+        if (blpos > 0.5)
+        {
+            blpos -= 1;
+        }
+        else if (blpos < -0.5)
+        {
+            blpos += 1;
+        }
+
+        double brpos = encbr.Get() - getbr;
+        if (brpos > 0.5)
+        {
+            brpos -= 1;
+        }
+        else if (brpos < -0.5)
+        {
+            brpos += 1;
+        }
+
+        rotfl.Set(-flpos * 1.5);
+        rotfr.Set(frpos * 1.5);
+        rotbl.Set(-blpos * 1.5);
+        rotbr.Set(-brpos * 1.5);
+
+        pidfl.SetReference(frole * speedfactor, rev::spark::SparkBase::ControlType::kVelocity);
+
+        pidfr.SetReference(frori * speedfactor, rev::spark::SparkBase::ControlType::kVelocity);
+
+        pidbl.SetReference(bale * speedfactor, rev::spark::SparkBase::ControlType::kVelocity);
+
+        pidbr.SetReference(bari * speedfactor, rev::spark::SparkBase::ControlType::kVelocity);
+    }
+
+    void Drive(double x, double y, double rotate)
+    {
+        // if (x != 0 && y != 0 && rotate != 0) {
+        try
+        {
+            d = 360 - ahrs->GetAngle();
+            frc::SmartDashboard::PutString("connection", "connected");
+        }
+        catch (int degree)  // This value is not used?
+        {
+            frc::SmartDashboard::PutString("connection", "lost");
+        }
+        units::degree_t degr{d};
+        frc::Rotation2d rot2d{degr};  // OK, rot2d reflects the AHRS orientation...
+
+        if (rotate * speedfactor > 4000)
+        {
+            rotate = 4000 / speedfactor;
+        }
+        else if (rotate * speedfactor * (-1) > 4000)
+        {
+            rotate = -4000 / speedfactor;
+        }
+
+        units::radians_per_second_t rad{rotate};
+        units::meters_per_second_t speedy{y};
+        units::meters_per_second_t speedx{x};
+        frc::ChassisSpeeds speeds = frc::ChassisSpeeds::FromFieldRelativeSpeeds(
+            limitx.Calculate(speedx),
+            limity.Calculate(speedy),
+            rad * 1.2,  // * 1.2 ??
+            rot2d  // This is what enables field-oriented control
+        );
 
         auto [fl, fr, bl, br] = kinematics.ToSwerveModuleStates(speeds);
 
@@ -431,9 +535,45 @@ class Robot : public frc::TimedRobot
         pidbr.SetReference(bari * speedfactor,  rev::spark::SparkBase::ControlType::kVelocity);
     }
 
-    void TeleopPeriodic()
+     void Drive2(double x, double y, double rotate)
     {
-        frc::SmartDashboard::PutNumber("fl", wheelfl.Get());
+        d = 360 - ahrs->GetAngle();
+        units::degree_t degr{d};
+        frc::Rotation2d rot2d{degr};  // OK, rot2d reflects the AHRS orientation...
+
+        units::meters_per_second_t speedx{x};
+        units::meters_per_second_t speedy{y};
+        units::radians_per_second_t rad{rotate};
+        frc::ChassisSpeeds speeds = frc::ChassisSpeeds::FromFieldRelativeSpeeds(
+            limitx.Calculate(speedx),
+            limity.Calculate(speedy),
+            rad,
+            rot2d  // This is what enables field-oriented control
+        );
+
+        auto [fl, fr, bl, br] = kinematics.ToSwerveModuleStates(speeds);
+
+        units::radian_t encflrad{encfl.Get() * 2 * PI};
+        frc::Rotation2d flcurrangle{encflrad};
+        auto flOptimized = frc::SwerveModuleState::Optimize(fl, flcurrangle);
+        flOptimized.speed *= (flOptimized.angle - flcurrangle).Cos();
+
+        double setangle = flOptimized.angle.Radians().value() * 0.01;
+        setangle = fmin(setangle, 1.0);
+        setangle = fmax(setangle, -1.0);
+        rotfl.Set(setangle);
+
+        double setspeed = flOptimized.speed.value() * 0.01;
+        setspeed = fmin(setspeed, 1.0);
+        setspeed = fmax(setspeed, -1.0);
+        pidfl.SetReference(setspeed, rev::spark::SparkBase::ControlType::kVelocity);
+
+        return;
+    }
+
+   void TeleopPeriodic()
+    {
+        frc::SmartDashboard::PutNumber("fl", wheelfl.Get());  // wheelfl.Get() returns the current set speed in [-1,1]
         frc::SmartDashboard::PutNumber("fr", wheelfr.Get());
         frc::SmartDashboard::PutNumber("bl", wheelbl.Get());
         frc::SmartDashboard::PutNumber("br", wheelbr.Get());
@@ -491,13 +631,13 @@ class Robot : public frc::TimedRobot
                 }
             }
             double drift = 0.15;
-            double x = controller.GetLeftX();
+            double x = controller.GetLeftY();  // Assigning joystick Y to field X
             if (x < drift && x > -drift)
             {
                 x = 0;
             }
 
-            double y = controller.GetLeftY();
+            double y = controller.GetLeftX();  // Assigning joystick X to field Y
             if (y < drift && y > -drift)
             {
                 y = 0;
@@ -510,7 +650,10 @@ class Robot : public frc::TimedRobot
             }
 
             // absolute encoders are analog and measure position in rotations
-            Drive(x, y, turn);
+            // We're calling Drive with values taken (pretty much) directly from the joysticks
+            // Also, even though the field defines plus-x as forward, the joysticks don't, so
+            // joystick up is joystick Y is field X. Nice...
+            Drive2(x, y, turn);
         }
 
         // controller2
