@@ -46,23 +46,25 @@ class Robot : public frc::TimedRobot
     rev::spark::SparkMax wheelbr{7, rev::spark::SparkLowLevel::MotorType::kBrushless};
     rev::spark::SparkClosedLoopController pidbr = wheelbr.GetClosedLoopController();
 
-    // Configuration object for PID control of drive motors via SparkMax's
-    rev::spark::SparkBaseConfig pidConfig{};
+    // Configuration objects for PID control of motors via SparkMax's
+    rev::spark::SparkBaseConfig driveConfig{};
+    rev::spark::SparkBaseConfig steerConfig{};
 
     // for encoders, consider changing methods to GetAlternateEncoder with AlternateEncoder::Type::kHallEffect or something if you face an error
-    // Setting up rotating motors using even CAN bus ID's
-    rev::spark::SparkMax rotfl{2, rev::spark::SparkLowLevel::MotorType::kBrushless};
-
+    // Setting up steering motors using even CAN bus ID's
     // The constructor parameter is the "analog input channel" to use, corresponding to
     // the RoboRIO AnalogIn pins.
-    frc::AnalogEncoder encfl{0};
+    rev::spark::SparkMax rotfl{2, rev::spark::SparkLowLevel::MotorType::kBrushless};
+    rev::spark::SparkClosedLoopController rotpidfl = rotfl.GetClosedLoopController();
+    frc::AnalogEncoder encfl{3};
     double lasta = 0;  // last angle? Not used
     rev::spark::SparkMax rotfr{6, rev::spark::SparkLowLevel::MotorType::kBrushless};
-    frc::AnalogEncoder encfr{1};
+    frc::AnalogEncoder encfr{2};
     rev::spark::SparkMax rotbl{4, rev::spark::SparkLowLevel::MotorType::kBrushless};
-    frc::AnalogEncoder encbl{2};
+    frc::AnalogEncoder encbl{0};
     rev::spark::SparkMax rotbr{8, rev::spark::SparkLowLevel::MotorType::kBrushless};
-    frc::AnalogEncoder encbr{3};
+    rev::spark::SparkRelativeEncoder m_brSteerEnc = rotbr.GetEncoder();
+    frc::AnalogEncoder encbr{1};
 
     // Setting up shooter motors
     rev::spark::SparkMax shoot_top{20, rev::spark::SparkLowLevel::MotorType::kBrushless};
@@ -125,25 +127,51 @@ class Robot : public frc::TimedRobot
         // so long as the methods return a reference to the object itself (as these methods do).
         // This is why all but the final method call in such chained calls omit the semicolon
         // at the end of their respective lines.
-        pidConfig
+        driveConfig
             .Inverted(true)
             .SetIdleMode(rev::spark::SparkBaseConfig::IdleMode::kBrake);
-        pidConfig.encoder
-            .PositionConversionFactor(1)
-            .VelocityConversionFactor(1);
-        pidConfig.closedLoop
+        driveConfig.encoder
+            .PositionConversionFactor(2 * PI * 2.0 * 0.0254)
+            .VelocityConversionFactor(2 * PI * 2.0 * 0.0254 / 60);
+//        driveConfig.encoder
+//            .PositionConversionFactor(1)
+//            .VelocityConversionFactor(1);
+        driveConfig.closedLoop
             .SetFeedbackSensor(rev::spark::ClosedLoopConfig::FeedbackSensor::kPrimaryEncoder)
             .Pid(0.0001, 0.000001, 0.00000001)
             .IZone(4000);
 
-        wheelfl.Configure(pidConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
+        steerConfig
+            .Inverted(true)
+            .SetIdleMode(rev::spark::SparkBaseConfig::IdleMode::kBrake);
+        steerConfig.encoder
+            .PositionConversionFactor(2 * PI)
+            .VelocityConversionFactor(2 * PI / 60);
+        steerConfig.closedLoop
+            .SetFeedbackSensor(rev::spark::ClosedLoopConfig::FeedbackSensor::kPrimaryEncoder)
+            .Pid(0.0001, 0.000001, 0.00000001)
+            .IZone(4000);
+
+        wheelfl.Configure(driveConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
             rev::spark::SparkMax::PersistMode::kPersistParameters);
-        wheelfr.Configure(pidConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
+        wheelfr.Configure(driveConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
             rev::spark::SparkMax::PersistMode::kPersistParameters);
-        wheelbl.Configure(pidConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
+        wheelbl.Configure(driveConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
             rev::spark::SparkMax::PersistMode::kPersistParameters);
-        wheelbr.Configure(pidConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
+        wheelbr.Configure(driveConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
             rev::spark::SparkMax::PersistMode::kPersistParameters);
+
+        rotfl.Configure(steerConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
+            rev::spark::SparkMax::PersistMode::kPersistParameters);
+        rotfr.Configure(steerConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
+            rev::spark::SparkMax::PersistMode::kPersistParameters);
+        rotbl.Configure(steerConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
+            rev::spark::SparkMax::PersistMode::kPersistParameters);
+        rotbr.Configure(steerConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
+            rev::spark::SparkMax::PersistMode::kPersistParameters);
+
+        wheelfl.GetEncoder().SetPosition(0);
+        rotfl.GetEncoder().SetPosition(encfl.Get());
 
 /*
         pidfl.SetP(0.0001);
@@ -443,6 +471,15 @@ class Robot : public frc::TimedRobot
         units::degree_t degr{d};
         frc::Rotation2d rot2d{degr};  // OK, rot2d reflects the AHRS orientation...
 
+        frc::SmartDashboard::PutNumber("Drive:x", x);
+        frc::SmartDashboard::PutNumber("Drive:y", y);
+        frc::SmartDashboard::PutNumber("Drive:rotate", rotate);
+        frc::SmartDashboard::PutNumber("AHRS", rot2d.Degrees().value());
+        frc::SmartDashboard::PutNumber("encfl.Get", encfl.Get());
+        frc::SmartDashboard::PutNumber("encfr.Get", encfr.Get());
+        frc::SmartDashboard::PutNumber("encbl.Get", encbl.Get());
+        frc::SmartDashboard::PutNumber("encbr.Get", encbr.Get());
+
         if (rotate * speedfactor > 4000)
         {
             rotate = 4000 / speedfactor;
@@ -476,7 +513,17 @@ class Robot : public frc::TimedRobot
         double bale = bl.speed.value();
         double bari = br.speed.value();
 
-        double flpos = encfl.Get() - getfl;  // steering??
+        frc::SmartDashboard::PutNumber("kinematics: FL.angle", getfl);
+        frc::SmartDashboard::PutNumber("kinematics: FR.angle", getfr);
+        frc::SmartDashboard::PutNumber("kinematics: BL.angle", getbl);
+        frc::SmartDashboard::PutNumber("kinematics: BR.angle", getbr);
+
+        frc::SmartDashboard::PutNumber("kinematics: FL.speed", frole);
+        frc::SmartDashboard::PutNumber("kinematics: FR.speed", frori);
+        frc::SmartDashboard::PutNumber("kinematics: BL.speed", bale);
+        frc::SmartDashboard::PutNumber("kinematics: BR.speed", bari);
+
+        double flpos = fmod(encfl.Get() + 0.0, 1) - getfl;  // steering??
 
         // Adjust flpos so that it is in the range [-0.5, 0.5]?
         if (flpos > 0.5)
@@ -487,8 +534,8 @@ class Robot : public frc::TimedRobot
         {
             flpos += 1;
         }
-
-        double frpos = fmod(encfr.Get() + .64, 1) - getfr;
+z
+        double frpos = fmod(encfr.Get() + 0.0, 1) - getfr;
         if (frpos > 0.5)
         {
             frpos -= 1;
@@ -497,7 +544,7 @@ class Robot : public frc::TimedRobot
         {
             frpos += 1;
         }
-        double blpos = fmod(encbl.Get() + .4, 1) - getbl;
+        double blpos = fmod(encbl.Get() + 0.0, 1) - getbl;
         if (blpos > 0.5)
         {
             blpos -= 1;
@@ -507,7 +554,7 @@ class Robot : public frc::TimedRobot
             blpos += 1;
         }
 
-        double brpos = encbr.Get() - getbr;
+        double brpos = fmod(encbr.Get() + 0.0, 1) - getbr;
         if (brpos > 0.5)
         {
             brpos -= 1;
@@ -517,21 +564,38 @@ class Robot : public frc::TimedRobot
             brpos += 1;
         }
 
-//        rotfl.Set(-flpos * 1.5);
-        rotfl.Set(-flpos * 0.1);
+        frc::SmartDashboard::PutNumber("flpos", flpos);
+        frc::SmartDashboard::PutNumber("frpos", frpos);
+        frc::SmartDashboard::PutNumber("blpos", blpos);
+        frc::SmartDashboard::PutNumber("brpos", brpos);
+
+/*
+//        return;
+
+        pidfl.SetReference(0, rev::spark::SparkBase::ControlType::kVelocity);
+        rotfl.Set(0);
+//        rotpidfl.SetReference(10, rev::spark::SparkBase::ControlType::kPosition);  // nominally in rotations, 
+
+///        return;
+
+        pidfl.SetReference(5, rev::spark::SparkBase::ControlType::kVelocity);
+        rotfl.Set(0);
+
+        pidbl.SetReference(5, rev::spark::SparkBase::ControlType::kVelocity);
+        rotbl.Set(0);
 
         return;
+*/
 
-        rotfr.Set(frpos * 1.5);
-        rotbl.Set(-blpos * 1.5);
-        rotbr.Set(-brpos * 1.5);
+        // rotfl.Set(-flpos * 1.5);
+        rotfl.Set(-flpos * 0.1);
+        rotfr.Set(frpos * 0.1);
+        rotbl.Set(-blpos * 0.1);
+        rotbr.Set(-brpos * 0.1);
 
         pidfl.SetReference(frole * speedfactor,  rev::spark::SparkBase::ControlType::kVelocity);
-
         pidfr.SetReference(frori * speedfactor,  rev::spark::SparkBase::ControlType::kVelocity);
-
         pidbl.SetReference(bale * speedfactor,  rev::spark::SparkBase::ControlType::kVelocity);
-
         pidbr.SetReference(bari * speedfactor,  rev::spark::SparkBase::ControlType::kVelocity);
     }
 
@@ -552,6 +616,10 @@ class Robot : public frc::TimedRobot
         );
 
         auto [fl, fr, bl, br] = kinematics.ToSwerveModuleStates(speeds);
+
+        SetDesiredStates(fl, fr, bl, br);
+
+        return;
 
         units::radian_t encflrad{encfl.Get() * 2 * PI};
         frc::Rotation2d flcurrangle{encflrad};
@@ -653,7 +721,7 @@ class Robot : public frc::TimedRobot
             // We're calling Drive with values taken (pretty much) directly from the joysticks
             // Also, even though the field defines plus-x as forward, the joysticks don't, so
             // joystick up is joystick Y is field X. Nice...
-            Drive2(x, y, turn);
+            Drive(x, y, turn);
         }
 
         // controller2
@@ -805,6 +873,26 @@ class Robot : public frc::TimedRobot
         double getbl = .825;
         double getbr = .125;
 
+        // Assuming that the absolute steering encoders (e.g. encfl) return rotations
+        // in response to Get(), then all of these values are in rotations (and I 
+        // wonder if 0.825 is supposed to be 0.875). So we obtain the current rotational
+        // position and subtract the desired angle (i.e. 1/8 of a rotation, or 3/8 of a
+        // rotation). If the result is more than half a rotation, then there's a more
+        // efficient way to get to that position by rotating in the opposite direction,
+        // hence the -= 1 or +=1.
+
+        // The difference between the absolute angular position and the desired position
+        // (e.g. 0.125) is simply the relative turn that the wheel needs to make to get
+        // to where we want it to go. Presumably when we use this difference, i.e. the
+        // relative turning angle to make, to call the *relative* encoder rotfl, we're
+        // asking for a turn *relative* to the current position.
+
+        // Questions:
+        // 1. Do we ever zero-out the encoders, or otherwise try to normalize them to
+        //    some known starting angle?
+        // 2. Why for the corners other than FL do we use the fmod function?
+        // 3. Why do we multiply the pos values by 1.5?
+        // 4. Suppose encfl.Get() returns the absolute angle of the wheel... 
         double flpos = encfl.Get() - getfl;
         if (flpos > 0.5)
         {
@@ -857,6 +945,42 @@ class Robot : public frc::TimedRobot
         pidbl.SetReference(0,  rev::spark::SparkBase::ControlType::kVelocity);
 
         pidbr.SetReference(0,  rev::spark::SparkBase::ControlType::kVelocity);
+    }
+
+    void xstop2()
+    {
+
+    }
+
+    void SetDesiredStates(frc::SwerveModuleState flDesiredState, frc::SwerveModuleState frDesiredState,
+        frc::SwerveModuleState blDesiredState, frc::SwerveModuleState brDesiredState)
+    {
+        frc::Rotation2d flangle = units::radian_t{rotfl.GetEncoder().GetPosition()};
+        frc::SwerveModuleState flopt = frc::SwerveModuleState::Optimize(flDesiredState, flangle);
+        frc::Rotation2d frangle = units::radian_t{rotfr.GetEncoder().GetPosition()};
+        frc::SwerveModuleState fropt = frc::SwerveModuleState::Optimize(frDesiredState, frangle);
+        frc::Rotation2d blangle = units::radian_t{rotbl.GetEncoder().GetPosition()};
+        frc::SwerveModuleState blopt = frc::SwerveModuleState::Optimize(blDesiredState, blangle);
+        frc::Rotation2d brangle = units::radian_t{rotbr.GetEncoder().GetPosition()};
+        frc::SwerveModuleState bropt = frc::SwerveModuleState::Optimize(brDesiredState, brangle);
+
+        SetState(flopt, wheelfl, rotfl);
+        SetState(fropt, wheelfr, rotfr);
+        SetState(blopt, wheelbl, rotbl);
+        SetState(bropt, wheelbr, rotbr);
+    }
+
+    void SetState(frc::SwerveModuleState optState, rev::spark::SparkMax& driveSpark, rev::spark::SparkMax& steerSpark)
+    {
+        double angleThr{2*PI/360};
+        double deltaAngle = optState.angle.Radians().value() - steerSpark.GetEncoder().GetPosition();
+        if ((fabs(optState.speed.value()) < 0.001) && (fabs(deltaAngle) < angleThr)) {
+            driveSpark.Set(0);
+            steerSpark.Set(0);
+        } else {
+            driveSpark.GetClosedLoopController().SetReference(optState.speed.value(), rev::spark::SparkBase::ControlType::kVelocity);
+            steerSpark.GetClosedLoopController().SetReference(optState.angle.Radians().value(), rev::spark::SparkBase::ControlType::kPosition);
+        }
     }
 
     void DisabledInit() {}
