@@ -130,12 +130,12 @@ class Robot : public frc::TimedRobot
         driveConfig
             .Inverted(true)
             .SetIdleMode(rev::spark::SparkBaseConfig::IdleMode::kBrake);
-        driveConfig.encoder
-            .PositionConversionFactor(2 * PI * 2.0 * 0.0254)
-            .VelocityConversionFactor(2 * PI * 2.0 * 0.0254 / 60);
 //        driveConfig.encoder
-//            .PositionConversionFactor(1)
-//            .VelocityConversionFactor(1);
+//            .PositionConversionFactor(2 * PI * 2.0 * 0.0254)
+//            .VelocityConversionFactor(2 * PI * 2.0 * 0.0254 / 60);
+        driveConfig.encoder
+            .PositionConversionFactor(1)
+            .VelocityConversionFactor(1);
         driveConfig.closedLoop
             .SetFeedbackSensor(rev::spark::ClosedLoopConfig::FeedbackSensor::kPrimaryEncoder)
             .Pid(0.0001, 0.000001, 0.00000001)
@@ -144,9 +144,12 @@ class Robot : public frc::TimedRobot
         steerConfig
             .Inverted(true)
             .SetIdleMode(rev::spark::SparkBaseConfig::IdleMode::kBrake);
+//        steerConfig.encoder
+//            .PositionConversionFactor(2 * PI)
+//           .VelocityConversionFactor(2 * PI / 60);
         steerConfig.encoder
-            .PositionConversionFactor(2 * PI)
-            .VelocityConversionFactor(2 * PI / 60);
+            .PositionConversionFactor(1)
+            .VelocityConversionFactor(1);
         steerConfig.closedLoop
             .SetFeedbackSensor(rev::spark::ClosedLoopConfig::FeedbackSensor::kPrimaryEncoder)
             .Pid(0.0001, 0.000001, 0.00000001)
@@ -474,7 +477,7 @@ class Robot : public frc::TimedRobot
         frc::SmartDashboard::PutNumber("Drive:x", x);
         frc::SmartDashboard::PutNumber("Drive:y", y);
         frc::SmartDashboard::PutNumber("Drive:rotate", rotate);
-        frc::SmartDashboard::PutNumber("AHRS", rot2d.Degrees().value());
+        frc::SmartDashboard::PutNumber("Drive: AHRS (rot2d)", rot2d.Degrees().value());
         frc::SmartDashboard::PutNumber("encfl.Get", encfl.Get());
         frc::SmartDashboard::PutNumber("encfr.Get", encfr.Get());
         frc::SmartDashboard::PutNumber("encbl.Get", encbl.Get());
@@ -534,8 +537,7 @@ class Robot : public frc::TimedRobot
         {
             flpos += 1;
         }
-z
-        double frpos = fmod(encfr.Get() + 0.0, 1) - getfr;
+        double frpos = fmod(encfr.Get() - 0.36, 1) - getfr;
         if (frpos > 0.5)
         {
             frpos -= 1;
@@ -544,7 +546,7 @@ z
         {
             frpos += 1;
         }
-        double blpos = fmod(encbl.Get() + 0.0, 1) - getbl;
+        double blpos = fmod(encbl.Get() + 0.395, 1) - getbl;
         if (blpos > 0.5)
         {
             blpos -= 1;
@@ -553,8 +555,7 @@ z
         {
             blpos += 1;
         }
-
-        double brpos = fmod(encbr.Get() + 0.0, 1) - getbr;
+        double brpos = fmod(encbr.Get() - 0.01, 1) - getbr;
         if (brpos > 0.5)
         {
             brpos -= 1;
@@ -564,10 +565,10 @@ z
             brpos += 1;
         }
 
-        frc::SmartDashboard::PutNumber("flpos", flpos);
-        frc::SmartDashboard::PutNumber("frpos", frpos);
-        frc::SmartDashboard::PutNumber("blpos", blpos);
-        frc::SmartDashboard::PutNumber("brpos", brpos);
+        frc::SmartDashboard::PutNumber("Drive: flpos", flpos);
+        frc::SmartDashboard::PutNumber("Drive: frpos", frpos);
+        frc::SmartDashboard::PutNumber("Drive: blpos", blpos);
+        frc::SmartDashboard::PutNumber("Drive: brpos", brpos);
 
 /*
 //        return;
@@ -588,15 +589,27 @@ z
 */
 
         // rotfl.Set(-flpos * 1.5);
-        rotfl.Set(-flpos * 0.1);
-        rotfr.Set(frpos * 0.1);
-        rotbl.Set(-blpos * 0.1);
-        rotbr.Set(-brpos * 0.1);
+        rotfl.Set(-flpos * 1.0);
+        rotfr.Set(-frpos * 1.0);
+        rotbl.Set(-blpos * 1.0);
+        rotbr.Set(-brpos * 1.0);
+
+//        pidfl.SetReference(720,  rev::spark::SparkBase::ControlType::kVelocity);
+//        pidfr.SetReference(720,  rev::spark::SparkBase::ControlType::kVelocity);
+//        pidbl.SetReference(720,  rev::spark::SparkBase::ControlType::kVelocity);
+//        pidbr.SetReference(720,  rev::spark::SparkBase::ControlType::kVelocity);
+
+        frc::SmartDashboard::PutNumber("FL vel", rotfl.GetEncoder().GetVelocity());
+        frc::SmartDashboard::PutNumber("FR vel", rotfr.GetEncoder().GetVelocity());
+        frc::SmartDashboard::PutNumber("BL vel", rotbl.GetEncoder().GetVelocity());
+        frc::SmartDashboard::PutNumber("BR vel", rotbr.GetEncoder().GetVelocity());
 
         pidfl.SetReference(frole * speedfactor,  rev::spark::SparkBase::ControlType::kVelocity);
         pidfr.SetReference(frori * speedfactor,  rev::spark::SparkBase::ControlType::kVelocity);
         pidbl.SetReference(bale * speedfactor,  rev::spark::SparkBase::ControlType::kVelocity);
         pidbr.SetReference(bari * speedfactor,  rev::spark::SparkBase::ControlType::kVelocity);
+
+        return;
     }
 
      void Drive2(double x, double y, double rotate)
@@ -641,10 +654,10 @@ z
 
    void TeleopPeriodic()
     {
-        frc::SmartDashboard::PutNumber("fl", wheelfl.Get());  // wheelfl.Get() returns the current set speed in [-1,1]
-        frc::SmartDashboard::PutNumber("fr", wheelfr.Get());
-        frc::SmartDashboard::PutNumber("bl", wheelbl.Get());
-        frc::SmartDashboard::PutNumber("br", wheelbr.Get());
+        frc::SmartDashboard::PutNumber("TeleopPeriodic: wheelfl.Get()", wheelfl.Get());  // wheelfl.Get() returns the current set speed in [-1,1]
+        frc::SmartDashboard::PutNumber("TeleopPeriodic: wheelfr.Get()", wheelfr.Get());
+        frc::SmartDashboard::PutNumber("TeleopPeriodic: wheelbl.Get()", wheelbl.Get());
+        frc::SmartDashboard::PutNumber("TeleopPeriodic: wheelbr.Get()", wheelbr.Get());
 
         //controller 1
         if ((controller.GetRightTriggerAxis() > 0.1) && !(controller.GetLeftTriggerAxis() > 0.1))
@@ -698,7 +711,7 @@ z
                     speedfactor -= 20;
                 }
             }
-            double drift = 0.15;
+            double drift = 0.1;
             double x = controller.GetLeftY();  // Assigning joystick Y to field X
             if (x < drift && x > -drift)
             {
