@@ -19,7 +19,6 @@
 #include <frc/Timer.h>
 #include <units/velocity.h>
 #include <frc/BuiltInAccelerometer.h>
-// #include <frc/interfaces/Gyro.h>
 #include <frc/PneumaticsModuleType.h>
 #include <rev/SparkClosedLoopController.h>
 #include <frc/PneumaticHub.h>
@@ -49,6 +48,7 @@ class Robot : public frc::TimedRobot
     // Configuration objects for PID control of motors via SparkMax's
     rev::spark::SparkBaseConfig driveConfig{};
     rev::spark::SparkBaseConfig steerConfig{};
+    rev::spark::SparkBaseConfig otherConfig{};
 
     // for encoders, consider changing methods to GetAlternateEncoder with AlternateEncoder::Type::kHallEffect or something if you face an error
     // Setting up steering motors using even CAN bus ID's
@@ -57,7 +57,6 @@ class Robot : public frc::TimedRobot
     rev::spark::SparkMax rotfl{2, rev::spark::SparkLowLevel::MotorType::kBrushless};
     rev::spark::SparkClosedLoopController rotpidfl = rotfl.GetClosedLoopController();
     frc::AnalogEncoder encfl{3};
-    double lasta = 0;  // last angle? Not used
     rev::spark::SparkMax rotfr{6, rev::spark::SparkLowLevel::MotorType::kBrushless};
     frc::AnalogEncoder encfr{2};
     rev::spark::SparkMax rotbl{4, rev::spark::SparkLowLevel::MotorType::kBrushless};
@@ -66,33 +65,24 @@ class Robot : public frc::TimedRobot
     rev::spark::SparkRelativeEncoder m_brSteerEnc = rotbr.GetEncoder();
     frc::AnalogEncoder encbr{1};
 
-    // Setting up shooter motors
-    rev::spark::SparkMax shoot_top{20, rev::spark::SparkLowLevel::MotorType::kBrushless};
-    rev::spark::SparkClosedLoopController pidshoot_top = shoot_top.GetClosedLoopController();
-    rev::spark::SparkMax shoot_bottom{21, rev::spark::SparkLowLevel::MotorType::kBrushless};
-    rev::spark::SparkClosedLoopController pidshoot_bottom = shoot_bottom.GetClosedLoopController();
+    // Elevator motors
+    rev::spark::SparkMax elev1{20, rev::spark::SparkLowLevel::MotorType::kBrushless};
+    rev::spark::SparkClosedLoopController elev1pid = elev1.GetClosedLoopController();
+    rev::spark::SparkMax elev2{21, rev::spark::SparkLowLevel::MotorType::kBrushless};
+    rev::spark::SparkClosedLoopController elev2pid = elev2.GetClosedLoopController();
+    rev::spark::SparkMax elev3{22, rev::spark::SparkLowLevel::MotorType::kBrushless};
+    rev::spark::SparkClosedLoopController elev3pid = elev3.GetClosedLoopController();
 
-    // Setting up intake motors
-    rev::spark::SparkMax intake{30, rev::spark::SparkLowLevel::MotorType::kBrushless};
-    rev::spark::SparkClosedLoopController pidintake = intake.GetClosedLoopController();
+    // Algae motors
+    rev::spark::SparkMax alg1{30, rev::spark::SparkLowLevel::MotorType::kBrushless};
+    rev::spark::SparkClosedLoopController alg1pid = alg1.GetClosedLoopController();
+    rev::spark::SparkMax alg2{31, rev::spark::SparkLowLevel::MotorType::kBrushless};
+    rev::spark::SparkClosedLoopController alg2pid = alg2.GetClosedLoopController();
 
-/*
-    rev::spark::SparkMax intakedeploy{24, rev::spark::SparkLowLevel::MotorType::kBrushless};
-    rev::spark::SparkClosedLoopController pidintakedeploy = intakedeploy.GetClosedLoopController();
+    // Hang motor
+    rev::spark::SparkMax hang{40, rev::spark::SparkLowLevel::MotorType::kBrushless};
+    rev::spark::SparkClosedLoopController hangpid = hang.GetClosedLoopController();
 
-    // Setting up hang motor
-    rev::spark::SparkMax hangdrive{25, rev::spark::SparkLowLevel::MotorType::kBrushless};
-    rev::spark::SparkClosedLoopController pidhangdrive = hangdrive.GetClosedLoopController();
-
-    // Setting up brushed motor
-//    rev::spark::SparkMax brushedmtr{9, rev::spark::SparkLowLevel::MotorType::kBrushed};
-//    frc::Spark brushedmtr{9};
-
-    // Setting up servo motor
-//    frc::Spark spark{0};
-//    bool servoRaised = false;
-
-*/
     int abuttoncount = 0;
     double d = 180;
     double speedfactor = 2000;
@@ -101,7 +91,6 @@ class Robot : public frc::TimedRobot
     double cfac = 0;
 
     frc::Timer time;
-    bool fieldoriented = false;  // Not used
 
     frc::BuiltInAccelerometer acc;
     // AHRS: attitude and heading reference system
@@ -117,11 +106,6 @@ class Robot : public frc::TimedRobot
 
     void RobotInit()
     {
-        // wheelfl.SetInverted(true);
-        // wheelbr.SetInverted(true);
-        // wheelbl.SetInverted(true);
-        // wheelfr.SetInverted(true);
-
         // This section, taken from the REVLib 2025 documentation, uses C++ "method chaining."
         // This is a compact notation whereby multiple calls on a single object can be combined,
         // so long as the methods return a reference to the object itself (as these methods do).
@@ -130,12 +114,12 @@ class Robot : public frc::TimedRobot
         driveConfig
             .Inverted(true)
             .SetIdleMode(rev::spark::SparkBaseConfig::IdleMode::kBrake);
-//        driveConfig.encoder
-//            .PositionConversionFactor(2 * PI * 2.0 * 0.0254)
-//            .VelocityConversionFactor(2 * PI * 2.0 * 0.0254 / 60);
         driveConfig.encoder
             .PositionConversionFactor(1)
             .VelocityConversionFactor(1);
+            // The following conversion factors caused mayhem for 2025:
+            // .PositionConversionFactor(2 * PI * 2.0 * 0.0254)
+            // .VelocityConversionFactor(2 * PI * 2.0 * 0.0254 / 60);
         driveConfig.closedLoop
             .SetFeedbackSensor(rev::spark::ClosedLoopConfig::FeedbackSensor::kPrimaryEncoder)
             .Pid(0.0001, 0.000001, 0.00000001)
@@ -144,12 +128,12 @@ class Robot : public frc::TimedRobot
         steerConfig
             .Inverted(true)
             .SetIdleMode(rev::spark::SparkBaseConfig::IdleMode::kBrake);
-//        steerConfig.encoder
-//            .PositionConversionFactor(2 * PI)
-//           .VelocityConversionFactor(2 * PI / 60);
         steerConfig.encoder
             .PositionConversionFactor(1)
             .VelocityConversionFactor(1);
+            // These caused mayhem for 2025:
+            // .PositionConversionFactor(2 * PI)
+            // .VelocityConversionFactor(2 * PI / 60);
         steerConfig.closedLoop
             .SetFeedbackSensor(rev::spark::ClosedLoopConfig::FeedbackSensor::kPrimaryEncoder)
             .Pid(0.0001, 0.000001, 0.00000001)
@@ -176,49 +160,31 @@ class Robot : public frc::TimedRobot
         wheelfl.GetEncoder().SetPosition(0);
         rotfl.GetEncoder().SetPosition(encfl.Get());
 
-/*
-        pidfl.SetP(0.0001);
-        pidfl.SetI(.000001);
-        pidfl.SetD(0.00000001);
-        pidfl.SetIZone(4000);
+        otherConfig
+            .Inverted(true)
+            .SetIdleMode(rev::spark::SparkBaseConfig::IdleMode::kBrake);
+        otherConfig.encoder
+            .PositionConversionFactor(1)
+            .VelocityConversionFactor(1);
+        otherConfig.closedLoop
+            .SetFeedbackSensor(rev::spark::ClosedLoopConfig::FeedbackSensor::kPrimaryEncoder)
+            .Pid(0.0001, 0.000001, 0.00000001)
+            .IZone(4000);
 
-        pidfr.SetP(0.0001);
-        pidfr.SetI(.000001);
-        pidfr.SetD(0.00000001);
-        pidfr.SetIZone(4000);
+        elev1.Configure(otherConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
+            rev::spark::SparkMax::PersistMode::kPersistParameters);
+        elev2.Configure(otherConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
+            rev::spark::SparkMax::PersistMode::kPersistParameters);
+        elev3.Configure(otherConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
+            rev::spark::SparkMax::PersistMode::kPersistParameters);
 
-        pidbl.SetP(0.0001);
-        pidbl.SetI(.000001);
-        pidbl.SetD(0.00000001);
-        pidbl.SetIZone(4000);
+        alg1.Configure(otherConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
+            rev::spark::SparkMax::PersistMode::kPersistParameters);
+        alg2.Configure(otherConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
+            rev::spark::SparkMax::PersistMode::kPersistParameters);
 
-        pidbr.SetP(0.0001);
-        pidbr.SetI(.000001);
-        pidbr.SetD(0.00000001);
-        pidbr.SetIZone(4000);
-*/
-
-/*
-        shoot_top.SetInverted(false);
-        pidshoot_top.SetP(0.0001);
-        pidshoot_top.SetI(.000001);
-        pidshoot_top.SetD(0.00000001);
-        pidshoot_top.SetIZone(4000);
-
-        shoot_bottom.SetInverted(true);
-        pidshoot_bottom.SetP(0.0001);
-        pidshoot_bottom.SetI(.000001);
-        pidshoot_bottom.SetD(0.00000001);
-        pidshoot_bottom.SetIZone(4000);
-
-        intake.SetInverted(false);
-        pidintake.SetP(0.0001);
-        pidintake.SetI(.000001);
-        pidintake.SetD(0.00000001);
-        pidintake.SetIZone(4000);
-*/
-
-//        spark.Set(0);
+        hang.Configure(otherConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
+            rev::spark::SparkMax::PersistMode::kPersistParameters);
 
         ahrs->Reset();
         ahrs->ResetDisplacement();
@@ -320,11 +286,13 @@ class Robot : public frc::TimedRobot
     {
         if (time.Get() <= 5_s)
         {
+            /*
             // spin shooter
             pidshoot_top.SetReference(10000,  rev::spark::SparkBase::ControlType::kVelocity);
             pidshoot_top.SetIAccum(0);
             pidshoot_bottom.SetReference(10000,  rev::spark::SparkBase::ControlType::kVelocity);
             pidshoot_bottom.SetIAccum(0);
+            */
         }
 /*
         else if ((time.Get() > 5_s) && (time.Get() < 8_s))
@@ -345,11 +313,13 @@ class Robot : public frc::TimedRobot
 */
         else
         {
+            /*
             // stop shooter
             pidshoot_top.SetReference(0,  rev::spark::SparkBase::ControlType::kVelocity);
             pidshoot_top.SetIAccum(0);
             pidshoot_bottom.SetReference(0,  rev::spark::SparkBase::ControlType::kVelocity);
             pidshoot_bottom.SetIAccum(0);
+            */
 
             if (fabs(ahrs->GetDisplacementY()) < 2.54)
             {
@@ -361,102 +331,6 @@ class Robot : public frc::TimedRobot
                 Drive(0, 0, 0);
             }
         }
-    }
-
-    void Drive0(double x, double y, double rotate)
-    {
-        // if (x != 0 && y != 0 && rotate != 0) {
-        try
-        {
-            d = 360 - ahrs->GetAngle();
-            frc::SmartDashboard::PutString("connection", "connected");
-        }
-        catch (int degree)
-        {
-            frc::SmartDashboard::PutString("connection", "lost");
-        }
-        units::degree_t degr{d};
-        frc::Rotation2d rot2d{degr};
-
-        if (rotate * speedfactor > 4000)
-        {
-            rotate = 4000 / speedfactor;
-        }
-        else if (rotate * speedfactor * (-1) > 4000)
-        {
-            rotate = -4000 / speedfactor;
-        }
-
-        units::radians_per_second_t rad{rotate};
-        units::meters_per_second_t speedy{y};
-        units::meters_per_second_t speedx{x};
-        frc::ChassisSpeeds speeds = frc::ChassisSpeeds::FromFieldRelativeSpeeds(limitx.Calculate(speedy), limity.Calculate(speedx), rad * 1.2, rot2d);
-
-        auto [fl, fr, bl, br] = kinematics.ToSwerveModuleStates(speeds);
-
-        // move swerve motors to angles here
-        double getfl = fl.angle.Radians().value() / 2.0 / PI;
-        double getfr = fr.angle.Radians().value() / 2.0 / PI;
-        double getbl = bl.angle.Radians().value() / 2.0 / PI;
-        double getbr = br.angle.Radians().value() / 2.0 / PI;
-
-        double frole = fl.speed.value();
-        double frori = fr.speed.value();
-        double bale = bl.speed.value();
-        double bari = br.speed.value();
-
-        double flpos = encfl.Get() - getfl;
-
-        if (flpos > 0.5)
-        {
-            flpos -= 1;
-        }
-        else if (flpos < -0.5)
-        {
-            flpos += 1;
-        }
-
-        double frpos = fmod(encfr.Get() + .64, 1) - getfr;
-        if (frpos > 0.5)
-        {
-            frpos -= 1;
-        }
-        else if (frpos < -0.5)
-        {
-            frpos += 1;
-        }
-        double blpos = fmod(encbl.Get() + .4, 1) - getbl;
-        if (blpos > 0.5)
-        {
-            blpos -= 1;
-        }
-        else if (blpos < -0.5)
-        {
-            blpos += 1;
-        }
-
-        double brpos = encbr.Get() - getbr;
-        if (brpos > 0.5)
-        {
-            brpos -= 1;
-        }
-        else if (brpos < -0.5)
-        {
-            brpos += 1;
-        }
-
-        rotfl.Set(-flpos * 1.5);
-        rotfr.Set(frpos * 1.5);
-        rotbl.Set(-blpos * 1.5);
-        rotbr.Set(-brpos * 1.5);
-
-        pidfl.SetReference(frole * speedfactor, rev::spark::SparkBase::ControlType::kVelocity);
-
-        pidfr.SetReference(frori * speedfactor, rev::spark::SparkBase::ControlType::kVelocity);
-
-        pidbl.SetReference(bale * speedfactor, rev::spark::SparkBase::ControlType::kVelocity);
-
-        pidbr.SetReference(bari * speedfactor, rev::spark::SparkBase::ControlType::kVelocity);
     }
 
     void Drive(double x, double y, double rotate)
@@ -570,34 +444,10 @@ class Robot : public frc::TimedRobot
         frc::SmartDashboard::PutNumber("Drive: blpos", blpos);
         frc::SmartDashboard::PutNumber("Drive: brpos", brpos);
 
-/*
-//        return;
-
-        pidfl.SetReference(0, rev::spark::SparkBase::ControlType::kVelocity);
-        rotfl.Set(0);
-//        rotpidfl.SetReference(10, rev::spark::SparkBase::ControlType::kPosition);  // nominally in rotations, 
-
-///        return;
-
-        pidfl.SetReference(5, rev::spark::SparkBase::ControlType::kVelocity);
-        rotfl.Set(0);
-
-        pidbl.SetReference(5, rev::spark::SparkBase::ControlType::kVelocity);
-        rotbl.Set(0);
-
-        return;
-*/
-
-        // rotfl.Set(-flpos * 1.5);
-        rotfl.Set(-flpos * 1.0);
-        rotfr.Set(-frpos * 1.0);
-        rotbl.Set(-blpos * 1.0);
-        rotbr.Set(-brpos * 1.0);
-
-//        pidfl.SetReference(720,  rev::spark::SparkBase::ControlType::kVelocity);
-//        pidfr.SetReference(720,  rev::spark::SparkBase::ControlType::kVelocity);
-//        pidbl.SetReference(720,  rev::spark::SparkBase::ControlType::kVelocity);
-//        pidbr.SetReference(720,  rev::spark::SparkBase::ControlType::kVelocity);
+        rotfl.Set(-flpos * 1.5);
+        rotfr.Set(-frpos * 1.5);
+        rotbl.Set(-blpos * 1.5);
+        rotbr.Set(-brpos * 1.5);
 
         frc::SmartDashboard::PutNumber("FL vel", rotfl.GetEncoder().GetVelocity());
         frc::SmartDashboard::PutNumber("FR vel", rotfr.GetEncoder().GetVelocity());
@@ -659,58 +509,86 @@ class Robot : public frc::TimedRobot
         frc::SmartDashboard::PutNumber("TeleopPeriodic: wheelbl.Get()", wheelbl.Get());
         frc::SmartDashboard::PutNumber("TeleopPeriodic: wheelbr.Get()", wheelbr.Get());
 
-        //controller 1
-        if ((controller.GetRightTriggerAxis() > 0.1) && !(controller.GetLeftTriggerAxis() > 0.1))
+        // ------------
+        // CONTROLLER 1
+        // ------------
+        double con1RT = controller.GetRightTriggerAxis();
+        double con1LT = controller.GetLeftTriggerAxis();
+        if ((con1RT > 0.1) && !(con1LT > 0.1))
         {
-            intake.Set(0.5);
-//            pidintake.SetReference(5000,  rev::spark::SparkBase::ControlType::kVelocity);
-            pidintake.SetIAccum(0);
+            // Raise elevator
+            elev1.Set(0.1 * con1RT);  // We could try SetReference on the closed loop controller with kPosition
+            elev1pid.SetIAccum(0);
         }
-        else if (!(controller.GetRightTriggerAxis() > 0.1) && (controller.GetLeftTriggerAxis() > 0.1))
+        else if (!(con1RT > 0.1) && (con1LT > 0.1))
         {
-            // Will SetReference to a negative value achieve what we want? Or will we need to switch to .Set() instead?
-            intake.Set(-0.5);
-//            pidintake.SetReference(-5000,  rev::spark::SparkBase::ControlType::kVelocity);
-            pidintake.SetIAccum(0);
+            // Lower elevator
+            elev1.Set(-0.1 * con1LT);
+            elev1pid.SetIAccum(0);
         }
-        else if (!(controller.GetRightTriggerAxis() > 0.1) && !(controller.GetLeftTriggerAxis() > 0.1))
+        else if (!(con1RT > 0.1) && !(con1LT > 0.1))
         {
-            intake.Set(0.0);
-//            pidintake.SetReference(0,  rev::spark::SparkBase::ControlType::kVelocity);
-            pidintake.SetIAccum(0);
+            // Stop elevator
+            elev1.Set(0.0);
+            elev1pid.SetIAccum(0);
         }
 
-        if (controller.GetAButton())
+        if (controller.GetYButton())
         {
             pidfl.SetIAccum(0);
             pidfr.SetIAccum(0);
             pidbl.SetIAccum(0);
             pidbr.SetIAccum(0);
         }
-        else if (controller.GetXButton())
+        
+        // Coral shoulder up and down are mutually exclusive
+        if (controller.GetAButton() && !controller.GetBButton())
+        {
+            elev2.Set(0.05);
+            elev2pid.SetIAccum(0);
+        }
+        else if (!controller.GetAButton() && controller.GetBButton())
+        {
+            elev2.Set(-0.05);
+            elev2pid.SetIAccum(0);
+        }
+        else
+        {
+            elev2.Set(0.0);
+            elev2pid.SetIAccum(0);
+        }
+
+        // Coral in and coral out are mutually exclusive
+        if (controller.GetRightBumper() && !controller.GetLeftBumper())
+        {
+            // Coral positive
+            elev3.Set(0.2);
+            elev3pid.SetIAccum(0);
+        }
+        else if (!controller.GetRightBumper() && controller.GetLeftBumper())
+        {
+            // Coral negative
+            elev3.Set(-0.2);
+            elev3pid.SetIAccum(0);
+        }
+        else
+        {
+            // Stop coral
+            elev3.Set(0.0);
+            elev3pid.SetIAccum(0);
+        }
+
+        // xstop and Drive are mutually exclusive
+        if (controller.GetXButton())
         {
             xstop();
             pidfl.SetIAccum(0);
             pidfr.SetIAccum(0);
             pidbl.SetIAccum(0);
             pidbr.SetIAccum(0);
-        }
+        } 
         else
-        {
-            if (controller.GetRightBumper())
-            {
-                if (speedfactor < 6000)
-                {
-                    speedfactor += 20;
-                }
-            }
-            else if (controller.GetLeftBumper())
-            {
-                if (speedfactor > 1000)
-                {
-                    speedfactor -= 20;
-                }
-            }
+        {        
             double drift = 0.1;
             double x = controller.GetLeftY();  // Assigning joystick Y to field X
             if (x < drift && x > -drift)
@@ -749,54 +627,68 @@ class Robot : public frc::TimedRobot
         {
         */
 
-            if (controller2.GetRightTriggerAxis() > 0.1)
+        // ------------
+        // CONTROLLER 2
+        // ------------
+        if (controller2.GetRightBumper() && !controller2.GetLeftBumper())
+        {
+            // Engage hang
+            hang.Set(0.1);
+            hangpid.SetIAccum(0);
+        }
+        else if (!controller2.GetRightBumper() && controller2.GetLeftBumper())
+        {
+            // Disengage hang
+            hang.Set(-0.1);
+            hangpid.SetIAccum(0);
+        }
+        else
+        {
+            // Stop hang...
+            hang.Set(0.0);
+
+            // ... and check for other conditions
+            if (controller2.GetAButton() && !controller2.GetBButton())
             {
-                /*
-                shoot_speed += add_value;
-                if (shoot_speed < 0) shoot_speed = 0;
-                if (shoot_speed > speed_cap) shoot_speed = speed_cap;
-                */
-
-                shoot_top.SetInverted(false);
-                pidshoot_top.SetReference(10000,  rev::spark::SparkBase::ControlType::kVelocity);
-                pidshoot_top.SetIAccum(0);
-                shoot_bottom.SetInverted(true);
-                pidshoot_bottom.SetReference(10000,  rev::spark::SparkBase::ControlType::kVelocity);
-                pidshoot_bottom.SetIAccum(0);
+                // Rotate algae arm positive
+                alg1.Set(0.05);
+                alg1pid.SetIAccum(0);
             }
-
+            else if (!controller2.GetAButton() && controller2.GetBButton())
+            {
+                // Rotate algae arm negative
+                alg1.Set(-0.05);
+                alg1pid.SetIAccum(0);
+            }
             else
             {
-                pidshoot_top.SetReference(0,  rev::spark::SparkBase::ControlType::kVelocity);
-                pidshoot_top.SetIAccum(0);
-                pidshoot_bottom.SetReference(0,  rev::spark::SparkBase::ControlType::kVelocity);
-                pidshoot_bottom.SetIAccum(0);
+                // Stop algae arm rotation
+                alg1.Set(0.0);
+                alg1pid.SetIAccum(0);
             }
 
-            //sleep(20);
-        //}
-/*
-        if (controller2.GetAButton() && !controller2.GetBButton())
-        {
-            //intake extend
-            intakedeploy.Set(0.1);
-//            intakedeploy.SetInverted(false);
-//            pidintakedeploy.SetReference(2000,  rev::spark::SparkBase::ControlType::kVelocity);
-            pidintakedeploy.SetIAccum(0);
+            double con2RT = controller2.GetRightTriggerAxis();
+            double con2LT = controller2.GetLeftTriggerAxis();
+            if ((con2RT > 0.1) && !(con2LT > 0.1))
+            {
+                // Drive algae roller positive
+                alg2.Set(con2RT);
+                alg2pid.SetIAccum(0);
+            }
+            else if (!(con2RT > 0.1) && (con2LT > 0.1))
+            {
+                // Drive algae roller negative
+                alg2.Set(-1.0 * con2LT);
+                alg2pid.SetIAccum(0);
+            }
+            else if (!(con2RT > 0.1) && !(con2LT > 0.1))
+            {
+                // Stop algae roller
+                alg2.Set(0.0);
+                alg2pid.SetIAccum(0);
+            }
         }
-        else if (!controller2.GetAButton() && controller2.GetBButton())
-        {
-            //intake retract
-            intakedeploy.Set(-0.1);
-//            pidintakedeploy.SetReference(0,  rev::spark::SparkBase::ControlType::kVelocity);
-            pidintakedeploy.SetIAccum(0);
-        }
-        else if (!controller2.GetAButton() && !controller2.GetBButton())
-        {
-            intakedeploy.Set(0.0);
-            pidintakedeploy.SetIAccum(0);
-        }
-*/
+
 /*        if (controller2.GetYButton())
         {
             intakedeploy.SetInverted(true);
@@ -864,26 +756,14 @@ class Robot : public frc::TimedRobot
             pidhangdrive.SetIAccum(0);
         }
 */
-/*      else if (controller2.GetAButton())
-        {
-            if (servoRaised)
-            {
-                spark.Set(0);
-                servoRaised = false;
-            } else {
-                spark.Set(1);
-                servoRaised = true;
-            }
-        }
-*/
     }
 
     void xstop()
     {
         // move swerve motors to angles here
         double getfl = .125;
-        double getfr = .825;
-        double getbl = .825;
+        double getfr = .875;
+        double getbl = .875;
         double getbr = .125;
 
         // Assuming that the absolute steering encoders (e.g. encfl) return rotations
@@ -906,7 +786,7 @@ class Robot : public frc::TimedRobot
         // 2. Why for the corners other than FL do we use the fmod function?
         // 3. Why do we multiply the pos values by 1.5?
         // 4. Suppose encfl.Get() returns the absolute angle of the wheel... 
-        double flpos = encfl.Get() - getfl;
+        double flpos = fmod(encfl.Get() + 0.0, 1) - getfl;
         if (flpos > 0.5)
         {
             flpos -= 1;
@@ -916,7 +796,7 @@ class Robot : public frc::TimedRobot
             flpos += 1;
         }
 
-        double frpos = fmod(encfr.Get() + .14, 1) - getfr;
+        double frpos = fmod(encfr.Get() - 0.36, 1) - getfr;
         if (frpos > 0.5)
         {
             frpos -= 1;
@@ -926,7 +806,7 @@ class Robot : public frc::TimedRobot
             frpos += 1;
         }
 
-        double blpos = fmod(encbl.Get() + .4, 1) - getbl;
+        double blpos = fmod(encbl.Get() + 0.395, 1) - getbl;
         if (blpos > 0.5)
         {
             blpos -= 1;
@@ -936,7 +816,7 @@ class Robot : public frc::TimedRobot
             blpos += 1;
         }
 
-        double brpos = encbr.Get() - getbr;
+        double brpos = fmod(encbr.Get() - 0.01, 1) - getbr;
         if (brpos > 0.5)
         {
             brpos -= 1;
@@ -947,22 +827,14 @@ class Robot : public frc::TimedRobot
         }
 
         rotfl.Set(-flpos * 1.5);
-        rotfr.Set(frpos * 1.5);
+        rotfr.Set(-frpos * 1.5);
         rotbl.Set(-blpos * 1.5);
         rotbr.Set(-brpos * 1.5);
 
         pidfl.SetReference(0,  rev::spark::SparkBase::ControlType::kVelocity);
-
         pidfr.SetReference(0,  rev::spark::SparkBase::ControlType::kVelocity);
-
         pidbl.SetReference(0,  rev::spark::SparkBase::ControlType::kVelocity);
-
         pidbr.SetReference(0,  rev::spark::SparkBase::ControlType::kVelocity);
-    }
-
-    void xstop2()
-    {
-
     }
 
     void SetDesiredStates(frc::SwerveModuleState flDesiredState, frc::SwerveModuleState frDesiredState,
