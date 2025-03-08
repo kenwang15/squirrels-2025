@@ -189,6 +189,9 @@ class Robot : public frc::TimedRobot
         ahrs->Reset();
         ahrs->ResetDisplacement();
         ahrs->SetAngleAdjustment(0);
+        
+        // Camera
+        frc::CameraServer::StartAutomaticCapture();
     }
 
     void RobotPeriodic() {}
@@ -204,86 +207,35 @@ class Robot : public frc::TimedRobot
         time.Reset();
         speedfactor = 2000;
     }
-/*
-    void AutoDrive(double x, double y, double rotate) {
 
-        try
-        {
-            d = 360-ahrs->GetAngle();
-            frc::SmartDashboard::PutString("connection", "connected");
-        } catch (int degree) {
-            frc::SmartDashboard::PutString("connection", "lost");
-        }
-        units::degree_t degr {d};
-        frc::Rotation2d rot2d {degr};
-
-        units::radians_per_second_t rad {rotate};
-        units::meters_per_second_t speedy {y};
-        units::meters_per_second_t speedx {x};
-        frc::ChassisSpeeds speeds = frc::ChassisSpeeds::FromFieldRelativeSpeeds(speedy, speedx, rad, rot2d);
-
-        auto [fl, fr, bl, br] = kinematics.ToSwerveModuleStates(speeds);
-
-        // move swerve motors to angles here
-        double getfl = fl.angle.Radians().value()/2.0/PI;
-        double getfr = fr.angle.Radians().value()/2.0/PI;
-        double getbl = bl.angle.Radians().value()/2.0/PI;
-        double getbr = br.angle.Radians().value()/2.0/PI;
-
-        double frole = fl.speed.value();
-        double frori = fr.speed.value();
-        double bale = bl.speed.value();
-        double bari = br.speed.value();
-
-        double flpos = encfl.GetAbsolutePosition()-getfl;
-
-        if (flpos > 0.5) {
-            flpos -= 1;
-        } else if (flpos < -0.5) {
-            flpos+=1;
-        }
-
-        double frpos = fmod(encfr.GetAbsolutePosition()+.64, 1)-getfr;
-        if (frpos > 0.5) {
-            frpos -= 1;
-        } else if (frpos < -0.5) {
-            frpos+=1;
-        }
-
-        double blpos = fmod(encbl.GetAbsolutePosition()+.4, 1)-getbl;
-        if (blpos > 0.5) {
-            blpos -= 1;
-        } else if (blpos < -0.5) {
-            blpos+=1;
-        }
-
-        double brpos = encbr.GetAbsolutePosition()-getbr;
-        if (brpos > 0.5) {
-            brpos -= 1;
-        } else if (brpos < -0.5) {
-            brpos+=1;
-        }
-
-        rotfl.Set(-flpos*1.5);
-        rotfr.Set(frpos*1.5);
-        rotbl.Set(-blpos*1.5);
-        rotbr.Set(-brpos*1.5);
-
-        if (brpos < .05 && blpos < .05 && flpos < .05 && frpos < .05 && frpos > -.05 && brpos > -.05 && blpos > -.05 && flpos > -.05) {
-            pidfl.SetReference(frole*speedfactor, rev::ControlType::kVelocity);
-            pidfr.SetReference(frori*speedfactor, rev::ControlType::kVelocity);
-            pidbl.SetReference(bale*speedfactor, rev::ControlType::kVelocity);
-            pidbr.SetReference(bari*speedfactor, rev::ControlType::kVelocity);
-        } else {
-            pidfl.SetReference(0, rev::ControlType::kVelocity);
-            pidfr.SetReference(0, rev::ControlType::kVelocity);
-            pidbl.SetReference(0, rev::ControlType::kVelocity);
-            pidbr.SetReference(0, rev::ControlType::kVelocity);
-        }
-    }
-*/
     void AutonomousPeriodic()
     {
+        // Autonomous is 15 seconds long
+        if (time.Get() <= 5_s)
+        {
+            Drive(0.3, 0, 0);
+        }
+        else{
+            Drive(0, 0, 0);
+        }
+        /*
+        else if (time.Get() > 5_s && time.Get() < 7_s)
+        {
+            Drive(0, 0, 0);
+            ahrs->ResetDisplacement();
+        }
+        else if (fabs(ahrs->GetDisplacementY()) < 2.1 && time.Get() < 15_s)
+        {
+            Drive(0.15, 0, 0);
+        }
+        else
+        {
+            Drive(0, 0, 0);
+        }
+        */
+
+        return;
+
         if (time.Get() <= 5_s)
         {
             /*
@@ -517,13 +469,13 @@ class Robot : public frc::TimedRobot
         if ((con1RT > 0.1) && !(con1LT > 0.1))
         {
             // Raise elevator
-            elev1.Set(0.1 * con1RT);  // We could try SetReference on the closed loop controller with kPosition
+            elev1.Set(0.5 * con1RT);  // We could try SetReference on the closed loop controller with kPosition
             elev1pid.SetIAccum(0);
         }
         else if (!(con1RT > 0.1) && (con1LT > 0.1))
         {
             // Lower elevator
-            elev1.Set(-0.1 * con1LT);
+            elev1.Set(-0.5 * con1LT);
             elev1pid.SetIAccum(0);
         }
         else if (!(con1RT > 0.1) && !(con1LT > 0.1))
@@ -544,12 +496,12 @@ class Robot : public frc::TimedRobot
         // Coral shoulder up and down are mutually exclusive
         if (controller.GetAButton() && !controller.GetBButton())
         {
-            elev2.Set(0.05);
+            elev2.Set(0.3);
             elev2pid.SetIAccum(0);
         }
         else if (!controller.GetAButton() && controller.GetBButton())
         {
-            elev2.Set(-0.05);
+            elev2.Set(-0.3);
             elev2pid.SetIAccum(0);
         }
         else
@@ -568,7 +520,7 @@ class Robot : public frc::TimedRobot
         else if (!controller.GetRightBumper() && controller.GetLeftBumper())
         {
             // Coral negative
-            elev3.Set(-0.2);
+            elev3.Set(-0.5);
             elev3pid.SetIAccum(0);
         }
         else
@@ -588,7 +540,22 @@ class Robot : public frc::TimedRobot
             pidbr.SetIAccum(0);
         } 
         else
-        {        
+        {   
+            if (controller.GetLeftStickButton() && !controller.GetRightStickButton())
+            {
+                if (speedfactor < 6000)
+                {
+                    speedfactor += 20;
+                }
+            }
+            else if (!controller.GetLeftStickButton() && controller.GetRightStickButton())
+            {
+                if (speedfactor > 1000)
+                {
+                    speedfactor -= 20;
+                }
+            }
+    
             double drift = 0.1;
             double x = controller.GetLeftY();  // Assigning joystick Y to field X
             if (x < drift && x > -drift)
@@ -633,13 +600,13 @@ class Robot : public frc::TimedRobot
         if (controller2.GetRightBumper() && !controller2.GetLeftBumper())
         {
             // Engage hang
-            hang.Set(0.1);
+            hang.Set(0.7);
             hangpid.SetIAccum(0);
         }
         else if (!controller2.GetRightBumper() && controller2.GetLeftBumper())
         {
             // Disengage hang
-            hang.Set(-0.1);
+            hang.Set(-0.7);
             hangpid.SetIAccum(0);
         }
         else
@@ -648,16 +615,16 @@ class Robot : public frc::TimedRobot
             hang.Set(0.0);
 
             // ... and check for other conditions
-            if (controller2.GetAButton() && !controller2.GetBButton())
+            if (controller2.GetXButton() && !controller2.GetBButton())
             {
                 // Rotate algae arm positive
                 alg1.Set(0.05);
                 alg1pid.SetIAccum(0);
             }
-            else if (!controller2.GetAButton() && controller2.GetBButton())
+            else if (!controller2.GetXButton() && controller2.GetBButton())
             {
                 // Rotate algae arm negative
-                alg1.Set(-0.05);
+                alg1.Set(-0.1);
                 alg1pid.SetIAccum(0);
             }
             else
@@ -672,13 +639,13 @@ class Robot : public frc::TimedRobot
             if ((con2RT > 0.1) && !(con2LT > 0.1))
             {
                 // Drive algae roller positive
-                alg2.Set(con2RT);
+                alg2.Set(-0.3 * con2RT);
                 alg2pid.SetIAccum(0);
             }
             else if (!(con2RT > 0.1) && (con2LT > 0.1))
             {
                 // Drive algae roller negative
-                alg2.Set(-1.0 * con2LT);
+                alg2.Set(0.3 * con2LT);
                 alg2pid.SetIAccum(0);
             }
             else if (!(con2RT > 0.1) && !(con2LT > 0.1))
