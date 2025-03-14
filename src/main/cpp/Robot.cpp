@@ -35,6 +35,11 @@ class Robot : public frc::TimedRobot
     frc::Translation2d m_backLeftLocation{-0.314_m, 0.314_m};
     frc::Translation2d m_backRightLocation{-0.314_m, -0.314_m};
 
+//    frc::Translation2d m_frontLeftLocation{0.314_m, -0.314_m};
+//    frc::Translation2d m_frontRightLocation{-0.314_m, -0.314_m};
+//    frc::Translation2d m_backLeftLocation{0.314_m, 0.314_m};
+//    frc::Translation2d m_backRightLocation{-0.314_m, 0.314_m};
+
     // Setting up drive motors using odd CAN bus ID's
     rev::spark::SparkMax wheelfl{1, rev::spark::SparkLowLevel::MotorType::kBrushless};
     rev::spark::SparkClosedLoopController pidfl = wheelfl.GetClosedLoopController();
@@ -48,6 +53,7 @@ class Robot : public frc::TimedRobot
     // Configuration objects for PID control of motors via SparkMax's
     rev::spark::SparkBaseConfig driveConfig{};
     rev::spark::SparkBaseConfig steerConfig{};
+    rev::spark::SparkBaseConfig elev1Config{};
     rev::spark::SparkBaseConfig otherConfig{};
 
     // for encoders, consider changing methods to GetAlternateEncoder with AlternateEncoder::Type::kHallEffect or something if you face an error
@@ -160,6 +166,17 @@ class Robot : public frc::TimedRobot
         wheelfl.GetEncoder().SetPosition(0);
         rotfl.GetEncoder().SetPosition(encfl.Get());
 
+        elev1Config
+            .Inverted(true)
+            .SetIdleMode(rev::spark::SparkBaseConfig::IdleMode::kBrake);
+        elev1Config.encoder
+            .PositionConversionFactor(1)
+            .VelocityConversionFactor(1);
+        elev1Config.closedLoop
+            .SetFeedbackSensor(rev::spark::ClosedLoopConfig::FeedbackSensor::kPrimaryEncoder)
+            .Pid(0.02, 0.00002, 0 * 0.00000001)
+            .IZone(4000);
+
         otherConfig
             .Inverted(true)
             .SetIdleMode(rev::spark::SparkBaseConfig::IdleMode::kBrake);
@@ -168,13 +185,15 @@ class Robot : public frc::TimedRobot
             .VelocityConversionFactor(1);
         otherConfig.closedLoop
             .SetFeedbackSensor(rev::spark::ClosedLoopConfig::FeedbackSensor::kPrimaryEncoder)
-            .Pid(0.0001, 0.000001, 0.00000001)
+            .Pid(0.02, 0.00001, 0.0)
             .IZone(4000);
 
-        elev1.Configure(otherConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
+        elev1.Configure(elev1Config, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
             rev::spark::SparkMax::PersistMode::kPersistParameters);
+        elev1.GetEncoder().SetPosition(0);
         elev2.Configure(otherConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
             rev::spark::SparkMax::PersistMode::kPersistParameters);
+        elev2.GetEncoder().SetPosition(0);
         elev3.Configure(otherConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
             rev::spark::SparkMax::PersistMode::kPersistParameters);
 
@@ -198,6 +217,7 @@ class Robot : public frc::TimedRobot
 
     void AutonomousInit()
     {
+        time.Reset();
         time.Start();
     }
 
@@ -211,13 +231,35 @@ class Robot : public frc::TimedRobot
     void AutonomousPeriodic()
     {
         // Autonomous is 15 seconds long
-        if (time.Get() <= 5_s)
+
+        // First, drive for 4 seconds to the reef:
+        if (time.Get() <= 4_s)
         {
-            Drive(0.3, 0, 0);
+            Drive(0.0, 0.0, 0);
         }
-        else{
+        else
+        {
             Drive(0, 0, 0);
+
+            // Then, rotate the coral arm to position 20:
+            if (time.Get() < 6_s)
+            {
+                elev2pid.SetReference(23,  rev::spark::SparkBase::ControlType::kPosition);
+            }
+            else {
+                // And then shoot for 1 second:
+                if (time.Get() < 8_s)
+                {
+                    elev3.Set(-0.5);
+                }
+                else
+                {
+                    elev3.Set(0.0);
+                    elev2pid.SetReference(0,  rev::spark::SparkBase::ControlType::kPosition);
+                }
+            }
         }
+
         /*
         else if (time.Get() > 5_s && time.Get() < 7_s)
         {
@@ -491,6 +533,7 @@ class Robot : public frc::TimedRobot
             pidfr.SetIAccum(0);
             pidbl.SetIAccum(0);
             pidbr.SetIAccum(0);
+            elev1pid.SetIAccum(0);
         }
         
         // Coral shoulder up and down are mutually exclusive
@@ -654,7 +697,21 @@ class Robot : public frc::TimedRobot
                 alg2.Set(0.0);
                 alg2pid.SetIAccum(0);
             }
+
+            // Auto position elevator
+            /*
+            if (controller2.GetAButton())
+            {
+                elev1pid.SetReference(25,  rev::spark::SparkBase::ControlType::kPosition);
+            }
+            else
+            {
+                elev1pid.SetReference(5,  rev::spark::SparkBase::ControlType::kPosition);
+            }
+            */
         }
+        frc::SmartDashboard::PutNumber("Elev1 pos", elev1.GetEncoder().GetPosition());
+        frc::SmartDashboard::PutNumber("Elev2 pos", elev2.GetEncoder().GetPosition());
 
 /*        if (controller2.GetYButton())
         {
