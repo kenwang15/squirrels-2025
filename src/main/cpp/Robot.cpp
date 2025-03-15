@@ -200,7 +200,7 @@ class Robot : public frc::TimedRobot
             .VelocityConversionFactor(1);
         hangConfig.closedLoop
             .SetFeedbackSensor(rev::spark::ClosedLoopConfig::FeedbackSensor::kPrimaryEncoder)
-            .Pid(0.0001, 0.0, 0.0)
+            .Pid(0.0005, 0.0000001, 0.0)
             .IZone(4000);
 
         elev1.Configure(elev1Config, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
@@ -250,7 +250,7 @@ class Robot : public frc::TimedRobot
         // First, drive for 4 seconds to the reef:
         if (time.Get() <= 4_s)
         {
-            Drive(0.0, 0.3, 0);
+            Drive(0.3, 0.0, 0);
         }
         else
         {
@@ -674,13 +674,13 @@ class Robot : public frc::TimedRobot
         {
             // Engage hang
 //            hang.Set(0.7);
-            hangpid.SetReference(0.1, rev::spark::SparkBase::ControlType::kVelocity);
+            hangpid.SetReference(650, rev::spark::SparkBase::ControlType::kVelocity);
         }
         else if (!controller2.GetRightBumper() && controller2.GetLeftBumper())
         {
             // Disengage hang
 //            hang.Set(-0.7);
-            hangpid.SetReference(-0.1, rev::spark::SparkBase::ControlType::kVelocity);
+            hangpid.SetReference(-650, rev::spark::SparkBase::ControlType::kVelocity);
         }
         else
         {
