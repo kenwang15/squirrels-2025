@@ -55,6 +55,7 @@ class Robot : public frc::TimedRobot
     rev::spark::SparkBaseConfig steerConfig{};
     rev::spark::SparkBaseConfig elev1Config{};
     rev::spark::SparkBaseConfig otherConfig{};
+    rev::spark::SparkBaseConfig hangConfig{};
 
     // for encoders, consider changing methods to GetAlternateEncoder with AlternateEncoder::Type::kHallEffect or something if you face an error
     // Setting up steering motors using even CAN bus ID's
@@ -249,28 +250,32 @@ class Robot : public frc::TimedRobot
         // First, drive for 4 seconds to the reef:
         if (time.Get() <= 4_s)
         {
-            Drive(0.0, 0.0, 0);
+            Drive(0.0, 0.3, 0);
         }
         else
         {
+            // Stop driving:
             Drive(0, 0, 0);
 
-            // Then, rotate the coral arm to position 23:
+            // Go to L1 position:
             if (time.Get() < 6_s)
             {
-                elev2pid.SetReference(23,  rev::spark::SparkBase::ControlType::kPosition);
+                elev1pid.SetReference(3, rev::spark::SparkBase::ControlType::kPosition);
+                elev2pid.SetReference(20, rev::spark::SparkBase::ControlType::kPosition);
             }
-            else {
-                // And then shoot for 1 second:
-                if (time.Get() < 8_s)
-                {
-                    elev3.Set(-0.5);
-                }
-                else
-                {
-                    elev3.Set(0.0);
-                    elev2pid.SetReference(0,  rev::spark::SparkBase::ControlType::kPosition);
-                }
+            else if (time.Get() < 8_s)
+            {
+                // Maintain L1 position and shoot:
+                elev1pid.SetReference(3, rev::spark::SparkBase::ControlType::kPosition);
+                elev2pid.SetReference(20, rev::spark::SparkBase::ControlType::kPosition);
+                elev3.Set(-0.5);
+            }
+            else
+            {
+                // Return to rest position and stop shooting:
+                elev1pid.SetReference(0, rev::spark::SparkBase::ControlType::kPosition);
+                elev2pid.SetReference(0, rev::spark::SparkBase::ControlType::kPosition);
+                elev3.Set(0.0);
             }
         }
 
