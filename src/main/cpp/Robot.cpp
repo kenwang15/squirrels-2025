@@ -110,6 +110,9 @@ class Robot : public frc::TimedRobot
     frc::SlewRateLimiter<units::meters_per_second> limitx{9_mps / .5_s};
     frc::SlewRateLimiter<units::meters_per_second> limity{9_mps / .5_s};
 
+    //Controller Mode Variables
+    bool m_manual_mode = true;
+    
     void RobotInit()
     {
         // This section, taken from the REVLib 2025 documentation, uses C++ "method chaining."
@@ -174,7 +177,7 @@ class Robot : public frc::TimedRobot
             .VelocityConversionFactor(1);
         elev1Config.closedLoop
             .SetFeedbackSensor(rev::spark::ClosedLoopConfig::FeedbackSensor::kPrimaryEncoder)
-            .Pid(0.02, 0.00002, 0 * 0.00000001)
+            .Pid(0.025, 0.000002, 0.00000001)
             .IZone(4000);
 
         otherConfig
@@ -185,7 +188,18 @@ class Robot : public frc::TimedRobot
             .VelocityConversionFactor(1);
         otherConfig.closedLoop
             .SetFeedbackSensor(rev::spark::ClosedLoopConfig::FeedbackSensor::kPrimaryEncoder)
-            .Pid(0.02, 0.00001, 0.0)
+            .Pid(0.0275, 0.000002, 0.00000001)
+            .IZone(4000);
+
+        hangConfig
+            .Inverted(true)
+            .SetIdleMode(rev::spark::SparkBaseConfig::IdleMode::kBrake);
+        hangConfig.encoder
+            .PositionConversionFactor(1)
+            .VelocityConversionFactor(1);
+        hangConfig.closedLoop
+            .SetFeedbackSensor(rev::spark::ClosedLoopConfig::FeedbackSensor::kPrimaryEncoder)
+            .Pid(0.0001, 0.0, 0.0)
             .IZone(4000);
 
         elev1.Configure(elev1Config, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
@@ -202,7 +216,7 @@ class Robot : public frc::TimedRobot
         alg2.Configure(otherConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
             rev::spark::SparkMax::PersistMode::kPersistParameters);
 
-        hang.Configure(otherConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
+        hang.Configure(hangConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
             rev::spark::SparkMax::PersistMode::kPersistParameters);
 
         ahrs->Reset();
@@ -241,7 +255,7 @@ class Robot : public frc::TimedRobot
         {
             Drive(0, 0, 0);
 
-            // Then, rotate the coral arm to position 20:
+            // Then, rotate the coral arm to position 23:
             if (time.Get() < 6_s)
             {
                 elev2pid.SetReference(23,  rev::spark::SparkBase::ControlType::kPosition);
@@ -506,25 +520,51 @@ class Robot : public frc::TimedRobot
         // ------------
         // CONTROLLER 1
         // ------------
-        double con1RT = controller.GetRightTriggerAxis();
-        double con1LT = controller.GetLeftTriggerAxis();
-        if ((con1RT > 0.1) && !(con1LT > 0.1))
+
+        if (controller.GetStartButtonPressed())
         {
-            // Raise elevator
-            elev1.Set(0.5 * con1RT);  // We could try SetReference on the closed loop controller with kPosition
-            elev1pid.SetIAccum(0);
+            m_manual_mode = !m_manual_mode;
         }
-        else if (!(con1RT > 0.1) && (con1LT > 0.1))
+        
+        if (m_manual_mode)
         {
-            // Lower elevator
-            elev1.Set(-0.5 * con1LT);
-            elev1pid.SetIAccum(0);
-        }
-        else if (!(con1RT > 0.1) && !(con1LT > 0.1))
-        {
-            // Stop elevator
-            elev1.Set(0.0);
-            elev1pid.SetIAccum(0);
+            double con1RT = controller.GetRightTriggerAxis();
+            double con1LT = controller.GetLeftTriggerAxis();
+            if ((con1RT > 0.1) && !(con1LT > 0.1))
+            {
+                // Raise elevator
+                elev1.Set(0.5 * con1RT);  // We could try SetReference on the closed loop controller with kPosition
+                elev1pid.SetIAccum(0);
+            }
+            else if (!(con1RT > 0.1) && (con1LT > 0.1))
+            {
+                // Lower elevator
+                elev1.Set(-0.5 * con1LT);
+                elev1pid.SetIAccum(0);
+            }
+            else if (!(con1RT > 0.1) && !(con1LT > 0.1))
+            {
+                // Stop elevator
+                elev1.Set(0.0);
+                elev1pid.SetIAccum(0);
+            }
+
+            // Coral shoulder up and down are mutually exclusive
+            if (controller.GetAButton() && !controller.GetBButton())
+            {
+                elev2.Set(0.3);
+                elev2pid.SetIAccum(0);
+            }
+            else if (!controller.GetAButton() && controller.GetBButton())
+            {
+                elev2.Set(-0.3);
+                elev2pid.SetIAccum(0);
+            }
+            else
+            {
+                elev2.Set(0.0);
+                elev2pid.SetIAccum(0);
+            }
         }
 
         if (controller.GetYButton())
@@ -534,25 +574,10 @@ class Robot : public frc::TimedRobot
             pidbl.SetIAccum(0);
             pidbr.SetIAccum(0);
             elev1pid.SetIAccum(0);
+            elev2pid.SetIAccum(0);
+            hangpid.SetIAccum(0);
         }
         
-        // Coral shoulder up and down are mutually exclusive
-        if (controller.GetAButton() && !controller.GetBButton())
-        {
-            elev2.Set(0.3);
-            elev2pid.SetIAccum(0);
-        }
-        else if (!controller.GetAButton() && controller.GetBButton())
-        {
-            elev2.Set(-0.3);
-            elev2pid.SetIAccum(0);
-        }
-        else
-        {
-            elev2.Set(0.0);
-            elev2pid.SetIAccum(0);
-        }
-
         // Coral in and coral out are mutually exclusive
         if (controller.GetRightBumper() && !controller.GetLeftBumper())
         {
@@ -643,19 +668,20 @@ class Robot : public frc::TimedRobot
         if (controller2.GetRightBumper() && !controller2.GetLeftBumper())
         {
             // Engage hang
-            hang.Set(0.7);
-            hangpid.SetIAccum(0);
+//            hang.Set(0.7);
+            hangpid.SetReference(0.1, rev::spark::SparkBase::ControlType::kVelocity);
         }
         else if (!controller2.GetRightBumper() && controller2.GetLeftBumper())
         {
             // Disengage hang
-            hang.Set(-0.7);
-            hangpid.SetIAccum(0);
+//            hang.Set(-0.7);
+            hangpid.SetReference(-0.1, rev::spark::SparkBase::ControlType::kVelocity);
         }
         else
         {
             // Stop hang...
-            hang.Set(0.0);
+//            hang.Set(0.0);
+            hangpid.SetReference(0.0, rev::spark::SparkBase::ControlType::kVelocity);
 
             // ... and check for other conditions
             if (controller2.GetXButton() && !controller2.GetBButton())
@@ -697,89 +723,50 @@ class Robot : public frc::TimedRobot
                 alg2.Set(0.0);
                 alg2pid.SetIAccum(0);
             }
+            if (!m_manual_mode)
+            {
+                // Coral Station Preset
+                if (controller2.GetLeftY() >= 0.75)
+                {
+                    elev1pid.SetReference(39, rev::spark::SparkBase::ControlType::kPosition);
+                    elev2pid.SetReference(34, rev::spark::SparkBase::ControlType::kPosition);
+                }
 
-            // Auto position elevator
-            /*
-            if (controller2.GetAButton())
-            {
-                elev1pid.SetReference(25,  rev::spark::SparkBase::ControlType::kPosition);
+                // L1 Preset
+                else if (controller2.GetLeftY() <= -0.75)
+                {
+                    elev1pid.SetReference(3, rev::spark::SparkBase::ControlType::kPosition);
+                    elev2pid.SetReference(20, rev::spark::SparkBase::ControlType::kPosition);
+                }
+
+                // L2 Preset
+                else if (controller2.GetRightY() >= 0.75)
+                {
+                    elev1pid.SetReference(49, rev::spark::SparkBase::ControlType::kPosition);
+                    elev2pid.SetReference(75, rev::spark::SparkBase::ControlType::kPosition);
+                }
+
+                // L3 Preset
+                else if (controller2.GetRightY() <= -0.75)
+                {
+                    elev1pid.SetReference(77, rev::spark::SparkBase::ControlType::kPosition);
+                    elev2pid.SetReference(75, rev::spark::SparkBase::ControlType::kPosition);
+                }
+
+                // Home
+                else
+                {
+                    elev1pid.SetReference(3, rev::spark::SparkBase::ControlType::kPosition);
+                    elev2pid.SetReference(0, rev::spark::SparkBase::ControlType::kPosition);
+                }
+                //else if L1
+                //else if L2
+                //else if L3
+                //else Home
             }
-            else
-            {
-                elev1pid.SetReference(5,  rev::spark::SparkBase::ControlType::kPosition);
-            }
-            */
         }
         frc::SmartDashboard::PutNumber("Elev1 pos", elev1.GetEncoder().GetPosition());
         frc::SmartDashboard::PutNumber("Elev2 pos", elev2.GetEncoder().GetPosition());
-
-/*        if (controller2.GetYButton())
-        {
-            intakedeploy.SetInverted(true);
-            pidintakedeploy.SetReference(2000,  rev::spark::SparkBase::ControlType::kVelocity);
-            pidintakedeploy.SetIAccum(0);
-        }
-        else if (!controller2.GetYButton())
-        {
-            pidintakedeploy.SetReference(0,  rev::spark::SparkBase::ControlType::kVelocity);
-            pidintakedeploy.SetIAccum(0);
-        }
-*/
-/*
-//used to be else if
-        if (controller2.GetLeftBumper())
-        {
-            hangdrive.Set(0.2);
-//           hangdrive.SetInverted(true);
-//            pidhangdrive.SetReference(2000,  rev::spark::SparkBase::ControlType::kVelocity);
-            pidhangdrive.SetIAccum(0);
-        }
-//        else if (!controller2.GetLeftBumper())
-        else
-        {
-            hangdrive.Set(0.0);
-//            pidhangdrive.SetReference(0,  rev::spark::SparkBase::ControlType::kVelocity);
-            pidhangdrive.SetIAccum(0);
-        }
-*/
-/*        if (controller2.GetRightBumper() && !controller2.GetLeftBumper())
-        {
-            brushedmtr.Set(-0.2);
-        }
-        else if (!controller2.GetRightBumper() && controller2.GetLeftBumper())
-        {
-            brushedmtr.Set(0.2);
-        }
-        else if (!controller2.GetRightBumper() && !controller2.GetLeftBumper())
-        {
-            brushedmtr.Set(0.0);
-        }
-*/
-/*
-        int pov = controller2.GetPOV();
-        if (pov >= 0)
-        {
-            int hangdir = (pov - 90) / (-90);
-            hangdrive.Set(hangdir * 0.5);
-        } else {
-            hangdrive.Set(0.0);
-        }
-*/
-/*
-        if (controller2.GetRightBumper())
-        {
-            hangdrive.Set(-0.2);
-//            hangdrive.SetInverted(false);
-//            pidhangdrive.SetReference(2000,  rev::spark::SparkBase::ControlType::kVelocity);
-            pidhangdrive.SetIAccum(0);
-        }
-        else if (!controller2.GetRightBumper())
-        {
-            hangdrive.Set(0.0);
-//            pidhangdrive.SetReference(0,  rev::spark::SparkBase::ControlType::kVelocity);
-            pidhangdrive.SetIAccum(0);
-        }
-*/
     }
 
     void xstop()
