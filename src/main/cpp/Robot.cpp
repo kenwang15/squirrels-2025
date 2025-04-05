@@ -53,6 +53,7 @@ class Robot : public frc::TimedRobot
     // Configuration objects for PID control of motors via SparkMax's
     rev::spark::SparkBaseConfig driveConfig{};
     rev::spark::SparkBaseConfig steerConfig{};
+    rev::spark::SparkBaseConfig steerConfigFR{};
     rev::spark::SparkBaseConfig elev1Config{};
     rev::spark::SparkBaseConfig otherConfig{};
     rev::spark::SparkBaseConfig hangConfig{};
@@ -148,7 +149,21 @@ class Robot : public frc::TimedRobot
             .SetFeedbackSensor(rev::spark::ClosedLoopConfig::FeedbackSensor::kPrimaryEncoder)
             .Pid(0.0001, 0.000001, 0.00000001)
             .IZone(4000);
-
+/*
+        steerConfigFR
+            .Inverted(true)
+            .SetIdleMode(rev::spark::SparkBaseConfig::IdleMode::kBrake);
+        steerConfigFR.encoder
+            .PositionConversionFactor(1)
+            .VelocityConversionFactor(1);
+            // These caused mayhem for 2025:
+            // .PositionConversionFactor(2 * PI)
+            // .VelocityConversionFactor(2 * PI / 60);
+        steerConfigFR.closedLoop
+            .SetFeedbackSensor(rev::spark::ClosedLoopConfig::FeedbackSensor::kPrimaryEncoder)
+            .Pid(0.00001, 0.000001, 0.0000001)
+            .IZone(4000);
+*/
         wheelfl.Configure(driveConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
             rev::spark::SparkMax::PersistMode::kPersistParameters);
         wheelfr.Configure(driveConfig, rev::spark::SparkMax::ResetMode::kResetSafeParameters,
@@ -246,11 +261,15 @@ class Robot : public frc::TimedRobot
     void AutonomousPeriodic()
     {
         // Autonomous is 15 seconds long
+        int autoL1h = 15;
+        int autoL1a = 50;
 
         // First, drive for 4 seconds to the reef:
         if (time.Get() <= 4_s)
         {
             Drive(0.3, 0.0, 0);
+            elev1pid.SetReference(autoL1h, rev::spark::SparkBase::ControlType::kPosition);
+            elev2pid.SetReference(autoL1a, rev::spark::SparkBase::ControlType::kPosition);
         }
         else
         {
@@ -260,14 +279,18 @@ class Robot : public frc::TimedRobot
             // Go to L1 position:
             if (time.Get() < 6_s)
             {
-                elev1pid.SetReference(3, rev::spark::SparkBase::ControlType::kPosition);
-                elev2pid.SetReference(20, rev::spark::SparkBase::ControlType::kPosition);
+//                elev1pid.SetReference(3, rev::spark::SparkBase::ControlType::kPosition);
+//                elev2pid.SetReference(20, rev::spark::SparkBase::ControlType::kPosition);
+                elev1pid.SetReference(autoL1h, rev::spark::SparkBase::ControlType::kPosition);
+                elev2pid.SetReference(autoL1a, rev::spark::SparkBase::ControlType::kPosition);
             }
             else if (time.Get() < 8_s)
             {
                 // Maintain L1 position and shoot:
-                elev1pid.SetReference(3, rev::spark::SparkBase::ControlType::kPosition);
-                elev2pid.SetReference(20, rev::spark::SparkBase::ControlType::kPosition);
+//                elev1pid.SetReference(3, rev::spark::SparkBase::ControlType::kPosition);
+//                elev2pid.SetReference(20, rev::spark::SparkBase::ControlType::kPosition);
+                elev1pid.SetReference(autoL1h, rev::spark::SparkBase::ControlType::kPosition);
+                elev2pid.SetReference(autoL1a, rev::spark::SparkBase::ControlType::kPosition);
                 elev3.Set(-0.5);
             }
             else
@@ -424,6 +447,7 @@ class Robot : public frc::TimedRobot
         {
             flpos += 1;
         }
+
         double frpos = fmod(encfr.Get() - 0.36, 1) - getfr;
         if (frpos > 0.5)
         {
@@ -433,6 +457,7 @@ class Robot : public frc::TimedRobot
         {
             frpos += 1;
         }
+
         double blpos = fmod(encbl.Get() + 0.395, 1) - getbl;
         if (blpos > 0.5)
         {
@@ -442,7 +467,8 @@ class Robot : public frc::TimedRobot
         {
             blpos += 1;
         }
-        double brpos = fmod(encbr.Get() - 0.01, 1) - getbr;
+
+        double brpos = fmod(encbr.Get() + 0.00, 1) - getbr;
         if (brpos > 0.5)
         {
             brpos -= 1;
@@ -629,11 +655,19 @@ class Robot : public frc::TimedRobot
                 }
             }
     
-            double drift = 0.1;
+            double drift = 0.15;
             double x = controller.GetLeftY();  // Assigning joystick Y to field X
             if (x < drift && x > -drift)
             {
                 x = 0;
+            }
+            else if (x <= -drift)
+            {
+                x = (x + drift) / (1.0 - drift);
+            }
+            else
+            {
+                x = (x - drift) / (1.0 - drift);
             }
 
             double y = controller.GetLeftX();  // Assigning joystick X to field Y
@@ -641,11 +675,27 @@ class Robot : public frc::TimedRobot
             {
                 y = 0;
             }
+            else if (y <= -drift)
+            {
+                y = (y + drift) / (1.0 - drift);
+            }
+            else
+            {
+                y = (y - drift) / (1.0 - drift);
+            }
 
             double turn = controller.GetRightX();
             if (turn < drift && turn > -drift)
             {
                 turn = 0;
+            }
+            else if (turn <= -drift)
+            {
+                turn = (turn + drift) / (1.0 - drift);
+            }
+            else
+            {
+                turn = (turn - drift) / (1.0 - drift);
             }
 
             // absolute encoders are analog and measure position in rotations
@@ -674,13 +724,13 @@ class Robot : public frc::TimedRobot
         {
             // Engage hang
 //            hang.Set(0.7);
-            hangpid.SetReference(650, rev::spark::SparkBase::ControlType::kVelocity);
+            hangpid.SetReference(2600, rev::spark::SparkBase::ControlType::kVelocity);
         }
         else if (!controller2.GetRightBumper() && controller2.GetLeftBumper())
         {
             // Disengage hang
 //            hang.Set(-0.7);
-            hangpid.SetReference(-650, rev::spark::SparkBase::ControlType::kVelocity);
+            hangpid.SetReference(-2600, rev::spark::SparkBase::ControlType::kVelocity);
         }
         else
         {
@@ -691,14 +741,14 @@ class Robot : public frc::TimedRobot
             // ... and check for other conditions
             if (controller2.GetXButton() && !controller2.GetBButton())
             {
-                // Rotate algae arm positive
-                alg1.Set(0.05);
+                // Rotate algae arm positive (down)
+                alg1.Set(0.15);
                 alg1pid.SetIAccum(0);
             }
             else if (!controller2.GetXButton() && controller2.GetBButton())
             {
-                // Rotate algae arm negative
-                alg1.Set(-0.1);
+                // Rotate algae arm negative (up)
+                alg1.Set(-0.2);
                 alg1pid.SetIAccum(0);
             }
             else
@@ -740,8 +790,8 @@ class Robot : public frc::TimedRobot
                 // L1 Preset
                 else if (controller2.GetLeftY() <= -0.75)
                 {
-                    elev1pid.SetReference(3, rev::spark::SparkBase::ControlType::kPosition);
-                    elev2pid.SetReference(20, rev::spark::SparkBase::ControlType::kPosition);
+                    elev1pid.SetReference(15, rev::spark::SparkBase::ControlType::kPosition);
+                    elev2pid.SetReference(50, rev::spark::SparkBase::ControlType::kPosition);
                 }
 
                 // L2 Preset
@@ -754,7 +804,7 @@ class Robot : public frc::TimedRobot
                 // L3 Preset
                 else if (controller2.GetRightY() <= -0.75)
                 {
-                    elev1pid.SetReference(77, rev::spark::SparkBase::ControlType::kPosition);
+                    elev1pid.SetReference(76, rev::spark::SparkBase::ControlType::kPosition);
                     elev2pid.SetReference(75, rev::spark::SparkBase::ControlType::kPosition);
                 }
 
@@ -832,7 +882,7 @@ class Robot : public frc::TimedRobot
             blpos += 1;
         }
 
-        double brpos = fmod(encbr.Get() - 0.01, 1) - getbr;
+        double brpos = fmod(encbr.Get() + 0.00, 1) - getbr;
         if (brpos > 0.5)
         {
             brpos -= 1;
